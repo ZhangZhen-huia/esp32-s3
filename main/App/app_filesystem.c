@@ -1,0 +1,1243 @@
+#include "Inc/app_filesystem.h"
+#include <errno.h>   // 在任何 .c 文件里 include 后就能用
+#include <dirent.h>
+#include <stddef.h>
+#include <time.h>
+#include <sys/stat.h>   // 主要声明：stat／lstat／fstat 函数和 struct stat
+#include <sys/types.h>  // 辅助类型（早期实现需要，可移植性建议保留）
+
+#define USING_CHINESE 1
+
+#if USING_CHINESE
+LV_FONT_DECLARE(font_alipuhui20);
+#endif
+
+const static char *TAG = "filesystem";
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+lv_obj_t *filesystem_ui_page;
+lv_obj_t *readfile_ui_page;
+
+multi_dir_browser_t *multi_dir_control;
+file_reader_t *file_reader;
+int multi_dir_browser_new_tab(multi_dir_browser_t *browser, const char *path);
+bool multi_dir_browser_open_dir(multi_dir_browser_t *browser, int tab_index, const char *path);
+static void file_reader_create_ui(file_reader_t *fr, multi_dir_browser_t *browser);
+static void file_reader_handle_event(lv_event_t *e, multi_dir_browser_t *browser);
+bool is_text_file(const char *filename);
+bool is_img_file(const char *filename);
+static void file_reader_close(file_reader_t *fr);
+static error_t file_reader_open_file(file_reader_t *fr, multi_dir_browser_t *browser, const char *path);
+static lv_img_dsc_t file_img_dsc = 
+{
+    .header.w = 240,
+    .header.h = 176,
+    .header.cf = LV_COLOR_FORMAT_RGB565,
+    .data = NULL,
+    .data_size = 240*176*2,
+};
+
+extern lv_obj_t *desktop_ui_page;
+
+
+
+static lv_image_dsc_t *sd_dsc[8] = {0};
+extern lv_image_dsc_t * main_anim_imgs[4];
+extern lv_image_dsc_t * desktop_anim_imgs[4];
+
+
+
+size_t count_char(const char *str, char ch)
+{
+    size_t cnt = 0;
+    while (*str) {          // 遇到 '\0' 停止
+        if (*str == ch) ++cnt;
+        ++str;
+    }
+    return cnt;
+}
+/* 加载一张 SD 卡图片到 PSRAM */
+static bool load_one_img(const char *path, uint8_t idx)
+{
+    FILE *fp = fopen(path, "rb");
+    if (!fp) {
+        ESP_LOGE(TAG, "open %s fail", path);
+        return false;
+    }
+    lv_image_header_t head;
+    fread(&head, sizeof(head), 1, fp);
+    size_t px_sz = head.w * head.h * 2;
+
+    uint8_t *px = heap_caps_malloc(px_sz, MALLOC_CAP_SPIRAM);
+    if (!px) { fclose(fp); return false; }
+    fread(px, 1, px_sz, fp);
+    fclose(fp);
+
+    sd_dsc[idx] = heap_caps_malloc(sizeof(lv_image_dsc_t), MALLOC_CAP_SPIRAM);
+    *sd_dsc[idx] = (lv_image_dsc_t){
+        .header = head,
+        .data   = px,
+        .data_size = px_sz,
+    };
+    return true;
+}
+
+
+/* 一次性加载 n 张 */
+bool load_all_sd_imgs(void)
+{
+    const char *file[8] = {
+        "/sdcard/gif/img1.bin",
+        "/sdcard/gif/img2.bin",
+        "/sdcard/gif/img3.bin",
+        "/sdcard/gif/img4.bin",
+        "/sdcard/gif/img6.bin",
+        "/sdcard/gif/img7.bin",
+        "/sdcard/gif/img8.bin",
+        "/sdcard/gif/img9.bin"
+    };
+    for (int i = 0; i < 8; i++) {
+        if (!load_one_img(file[i], i)) return false;
+        if(i<4)
+            main_anim_imgs[i] = sd_dsc[i];
+        else
+            desktop_anim_imgs[i-4] = sd_dsc[i];
+
+    }
+    ESP_LOGI(TAG,"load finish");
+    return true;
+}
+
+
+// 初始化样式
+static void init_styles(multi_dir_browser_t *browser) {
+    // 背景样式
+    lv_style_init(&browser->style_bg);
+    lv_style_set_bg_opa( &browser->style_bg, LV_OPA_COVER ); // 背景透明度
+    lv_style_set_border_width(&browser->style_bg, 0); // 边框宽度
+    lv_style_set_pad_all(&browser->style_bg, 0);  // 内间距
+    lv_style_set_radius(&browser->style_bg, 0);   // 圆角半径
+    lv_style_set_width(&browser->style_bg, 320);  // 宽
+    lv_style_set_height(&browser->style_bg, 240); // 高
+    
+
+    //列表样式
+    lv_style_init(&browser->style_list);
+    lv_style_set_bg_color(&browser->style_list, lv_color_hex(0xffffff));
+    lv_style_set_text_font(&browser->style_list,&lv_font_montserrat_18);
+    lv_style_set_size(&browser->style_list,320,200);
+    lv_style_set_border_width(&browser->style_list, 0);
+    lv_style_set_radius(&browser->style_list, 0);
+    lv_style_set_pad_all(&browser->style_list, 0);
+    lv_style_set_pad_gap(&browser->style_list, 0);
+
+
+
+    
+    // 列表按钮样式            
+    lv_style_init(&browser->style_list_btn);
+    lv_style_set_bg_opa(&browser->style_list_btn, 255);
+    lv_style_set_bg_color(&browser->style_list_btn,lv_color_hex(0x0));
+    lv_style_set_text_color(&browser->style_list_btn,lv_color_hex(0xffffff));
+    lv_style_set_border_width(&browser->style_list_btn, 0);
+    lv_style_set_radius(&browser->style_list_btn, 0);
+    
+    // 标签样式
+    lv_style_init(&browser->style_label);
+    lv_style_set_text_color(&browser->style_label, lv_color_white());
+    lv_style_set_text_font(&browser->style_label, &lv_font_montserrat_18);
+}
+
+// 关闭标签页
+bool multi_dir_browser_close_tab(multi_dir_browser_t *browser, int tab_index) {
+    // if (tab_index < 0 || tab_index >= browser->tab_count || browser->tab_count <= 1) {
+    //     return false;
+    // }
+    
+    // // 释放资源
+    // if (browser->tabs[tab_index].files) {
+    //     free(browser->tabs[tab_index].files);
+    //     browser->tabs[tab_index].files = NULL;
+    // }
+    
+    // // 移除标签页
+    // lv_obj_del(browser->tabs[tab_index].tab);
+    
+    // // 移动后续标签页
+    // for (int i = tab_index; i < browser->tab_count - 1; i++) {
+    //     browser->tabs[i] = browser->tabs[i + 1];
+    // }
+    
+    // browser->tab_count--;
+    
+    // // 更新活动标签页
+    // if (browser->active_tab >= tab_index) {
+    //     browser->active_tab = MAX(0, browser->active_tab - 1);
+    // }
+    
+    // // 切换到剩余的第一个标签页
+    // lv_tabview_set_act(browser->tabview, browser->active_tab, LV_ANIM_ON);
+    
+    return true;
+}
+
+// 刷新当前标签页
+void multi_dir_browser_refresh(multi_dir_browser_t *browser) {
+    // int active_tab = browser->active_tab;
+    // if (active_tab >= 0 && active_tab < browser->tab_count) {
+    //     multi_dir_browser_open_dir(browser, active_tab, browser->tabs[active_tab].current_path);
+    // }
+}
+
+// 添加书签
+bool multi_dir_browser_add_bookmark(multi_dir_browser_t *browser, const char *name, const char *path) {
+    // if (browser->bookmark_count >= MAX_BOOKMARKS) {
+    //     return false;
+    // }
+    
+    // // 检查是否已存在
+    // for (int i = 0; i < browser->bookmark_count; i++) {
+    //     if (strcmp(browser->bookmarks[i].path, path) == 0) {
+    //         // 更新现有书签
+    //         strlcpy(browser->bookmarks[i].name, name, MAX_FILENAME_LEN);
+    //         return true;
+    //     }
+    // }
+    
+    // // 添加新书签
+    // strlcpy(browser->bookmarks[browser->bookmark_count].name, name, MAX_FILENAME_LEN);
+    // strlcpy(browser->bookmarks[browser->bookmark_count].path, path, MAX_PATH_LEN);
+    // browser->bookmark_count++;
+    
+    return true;
+}
+
+
+// 保存当前滚动位置
+static void save_scroll_position(multi_dir_browser_t *browser, int tab_index) {
+    if (tab_index < 0 || tab_index >= browser->tab_count) {
+        return;
+    }
+    
+    tab_t *tab = &browser->tabs[tab_index];
+    if (tab->file_list) {
+        // 获取当前滚动位置
+        lv_coord_t scroll_y = lv_obj_get_scroll_y(tab->file_list);
+        tab->scroll_pos = scroll_y;
+        
+        // 保存到历史记录
+        if (tab->history_index >= 0 && tab->history_index < tab->history_count) {
+            tab->history[tab->history_index].scroll_pos = scroll_y;
+        }
+    }
+}
+
+void scroll_timer(lv_timer_t *timer)
+{
+    user_data_t *user_data = lv_timer_get_user_data(timer);
+    
+    multi_dir_browser_t *browser = user_data->browser;
+    int tab_index = (int)(intptr_t)user_data->index;
+    
+    if (tab_index >= 0 && tab_index < browser->tab_count) {
+        tab_t *tab = &browser->tabs[tab_index];
+        if (tab->file_list) {
+            lv_obj_scroll_to_y(tab->file_list, tab->scroll_pos, LV_ANIM_OFF);
+        }
+    }
+    
+    lv_timer_del(timer);    
+}
+
+// 恢复滚动位置
+static void restore_scroll_position(multi_dir_browser_t *browser, int tab_index) {
+    if (tab_index < 0 || tab_index >= browser->tab_count) {
+        return;
+    }
+    
+    tab_t *tab = &browser->tabs[tab_index];
+    if (tab->file_list && tab->scroll_pos > 0) {
+        user_data_t *user_data = malloc(sizeof(user_data_t));
+        user_data->browser = browser;
+        user_data->index = (intptr_t)tab_index;
+        // 延迟一点时间确保列表已完全渲染
+        lv_timer_t *timer = lv_timer_create(scroll_timer, 100, user_data);
+        
+    }
+}
+
+
+// 修改标签页切换函数，添加滚动位置保存和恢复
+int multi_dir_browser_new_tab(multi_dir_browser_t *browser, const char *path) {
+    if (browser->tab_count >= MAX_TABS) {
+        ESP_LOGE(TAG, "Maximum number of tabs reached");
+        return -1;
+    }
+    
+    // 保存当前标签页的滚动位置
+    save_scroll_position(browser, browser->active_tab);
+    
+    int new_tab_index = browser->tab_count;
+    browser->tab_count++;
+    
+    // 确定新标签页的路径
+    const char *new_tab_path;
+    if (path && path[0] != '\0') {
+        // 如果提供了路径，使用提供的路径
+        new_tab_path = path;
+    } else if (browser->tab_count > 1) {
+        // 如果有其他标签页，使用当前活动标签页的路径
+        new_tab_path = browser->tabs[browser->active_tab].current_path;
+    } else {
+        // 否则使用默认路径
+        new_tab_path = "/sdcard";
+    }
+    
+    // 创建新标签页
+    char tab_name[20];
+    // 使用路径的最后一部分作为标签页名称
+    const char *last_slash = strrchr(new_tab_path, '/');
+    if (last_slash && strlen(last_slash) > 1) {
+        snprintf(tab_name, sizeof(tab_name), "%.15s", last_slash + 1);
+    } else {
+        snprintf(tab_name, sizeof(tab_name), "Tab %d", new_tab_index + 1);
+    }
+    
+    browser->tabs[new_tab_index].tab = lv_tabview_add_tab(browser->tabview, tab_name);
+    
+    // 创建路径标签
+    browser->tabs[new_tab_index].path_label = lv_label_create(browser->tabs[new_tab_index].tab);
+    lv_obj_add_style(browser->tabs[new_tab_index].path_label, &browser->style_label, 0);
+    lv_label_set_text(browser->tabs[new_tab_index].path_label, new_tab_path);
+    lv_obj_align(browser->tabs[new_tab_index].path_label, LV_ALIGN_TOP_LEFT, 10, 10);
+    
+    // 创建文件列表
+    browser->tabs[new_tab_index].file_list = lv_list_create(browser->tabs[new_tab_index].tab);
+    lv_obj_add_style(browser->tabs[new_tab_index].file_list, &browser->style_list, 0);
+    lv_obj_set_size(browser->tabs[new_tab_index].file_list, LV_PCT(95), LV_PCT(85));
+    lv_obj_align(browser->tabs[new_tab_index].file_list, LV_ALIGN_TOP_LEFT, 10, 40);
+    
+    // 初始化目录
+    strlcpy(browser->tabs[new_tab_index].current_path, new_tab_path, sizeof(browser->tabs[new_tab_index].current_path));
+    multi_dir_browser_open_dir(browser, new_tab_index, new_tab_path);
+    
+    // 切换到新标签页
+    lv_tabview_set_act(browser->tabview, new_tab_index, LV_ANIM_ON);
+    browser->active_tab = new_tab_index;
+    
+    return new_tab_index;
+}
+
+static void close_menu_cb(lv_event_t * e)
+{
+    lv_obj_t * menu = lv_obj_get_parent(lv_event_get_target(e));
+    lv_obj_del(menu);
+}
+
+// 显示书签菜单
+void multi_dir_browser_show_bookmarks(multi_dir_browser_t *browser) {
+    // // 创建书签菜单
+    // lv_obj_t *bookmark_menu = lv_obj_create(lv_scr_act());
+    // lv_obj_set_user_data(bookmark_menu, (void*)BUTTON_BOOKMARKS); // 设置标识
+    // lv_obj_set_size(bookmark_menu, 300, 400);
+    // lv_obj_center(bookmark_menu);
+    // lv_obj_add_style(bookmark_menu, &browser->style_list, 0);
+    
+    // // 添加标题
+    // lv_obj_t *title = lv_label_create(bookmark_menu);
+    // lv_obj_add_style(title, &browser->style_label, 0);
+    // lv_label_set_text(title, "Bookmarks");
+    // lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    // lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
+    
+    // // 创建书签列表
+    // lv_obj_t *bookmark_list = lv_list_create(bookmark_menu);
+    // lv_obj_set_size(bookmark_list, LV_PCT(90), LV_PCT(70));
+    // lv_obj_align(bookmark_list, LV_ALIGN_TOP_MID, 0, 50);
+    // lv_obj_add_style(bookmark_list, &browser->style_list, 0);
+    
+    // // 添加书签项
+    // for (int i = 0; i < browser->bookmark_count; i++) {
+    //     lv_obj_t *btn = lv_list_add_btn(bookmark_list, LV_SYMBOL_DIRECTORY, browser->bookmarks[i].name);
+    //     lv_obj_add_style(btn, &browser->style_list_btn, 0);
+    //     lv_obj_set_user_data(btn, (void *)(intptr_t)i);
+    //     lv_obj_add_event_cb(btn, multi_dir_browser_handle_event, LV_EVENT_CLICKED, browser);
+    // }
+    
+    // // 添加关闭按钮
+    // lv_obj_t *close_btn = lv_btn_create(bookmark_menu);
+    // lv_obj_set_size(close_btn, 100, 30);
+    // lv_obj_align(close_btn, LV_ALIGN_BOTTOM_MID, 0, -10);
+    // lv_obj_t *close_label = lv_label_create(close_btn);
+    // lv_label_set_text(close_label, "Close");
+    // lv_obj_center(close_label);
+    // lv_obj_add_event_cb(close_btn,close_menu_cb, LV_EVENT_CLICKED, NULL);
+}
+
+
+// 处理UI事件
+// 修改事件处理函数，添加滚动位置保存
+static void multi_dir_browser_handle_event(lv_event_t *e) {
+    lv_obj_t *target = lv_event_get_target(e);
+    multi_dir_browser_t *browser = lv_event_get_user_data(e);
+    lv_event_code_t code = lv_event_get_code(e);
+    
+        // 首先检查是否是文件阅读器的事件
+    if (file_reader->is_reading) {
+        file_reader_handle_event(e, browser);
+        return;
+    }
+
+    if (code == LV_EVENT_CLICKED) {
+        // 获取按钮类型
+        button_type_t button_type = (button_type_t)(intptr_t)lv_obj_get_user_data(target);
+        
+        switch (button_type) {
+            case BUTTON_NEW_TAB:
+                // multi_dir_browser_new_tab(browser, NULL);
+                break;
+                
+            case BUTTON_BOOKMARKS:
+                // multi_dir_browser_show_bookmarks(browser);
+                break;
+                
+            case BUTTON_REFRESH:
+                // 保存当前滚动位置
+                // save_scroll_position(browser, browser->active_tab);
+                // multi_dir_browser_refresh(browser);
+                break;
+                
+            default:
+                // 处理文件列表中的按钮
+                for (int i = 0; i < browser->tab_count; i++) {
+                    //获取到文件所在的文件列表
+                    if (lv_obj_get_parent(target) == browser->tabs[i].file_list) {
+                        //获取文件索引
+                        intptr_t index = (intptr_t)lv_obj_get_user_data(target);
+                        
+                        //返回上级目录按钮
+                        if (index == -1) {
+                            // 上级目录按钮 - 保存当前滚动位置
+                            save_scroll_position(browser, i);
+                            
+                            char *last_slash = strrchr(browser->tabs[i].current_path, '/');
+                            //存在多级目录，并且不是字符串首字符（防止把根目录 / 也砍掉）
+                            if (last_slash && last_slash != browser->tabs[i].current_path) {
+                                
+                                //通过指针操作把当前目录的最后一级目录置空
+                                *last_slash = '\0';
+                                //打开置空之后的目录，也就是上级目录
+                                /* 退出/返回上级时 */
+
+                                multi_dir_browser_open_dir(browser, i, browser->tabs[i].current_path);
+                            }
+                            //当前目录不是根目录
+                            else if (strcmp(browser->tabs[i].current_path, "/sdcard") != 0) {
+                                multi_dir_browser_open_dir(browser, i, "/sdcard");
+                            }
+                        }
+                        //是文件索引
+                        // 在 multi_dir_browser_handle_event 函数中修改文件打开部分
+                        else if (index >= 0 && index < browser->tabs[i].iterator->count) {
+                            // 文件或目录按钮 - 保存当前滚动位置
+                            save_scroll_position(browser, i);
+                            
+                            char new_path[MAX_PATH_LEN];
+                            snprintf(new_path, sizeof(new_path), "%s/%s", 
+                                    browser->tabs[i].current_path, 
+                                    browser->tabs[i].files[index].name);
+                            
+                            //如果是目录
+                            if (browser->tabs[i].files[index].is_dir) {
+                                // 打开目录
+                                multi_dir_browser_open_dir(browser, i, new_path);
+                            } else {
+                                ESP_LOGI(TAG, "File selected: %s", new_path);
+                                
+                                // 检查文件类型
+                                if(is_img_file(browser->tabs[i].files[index].name)) {
+                                    // 图片文件处理
+                                    char path[256] = {0};
+                                    file_iterator_get_full_path_from_index(browser->tabs[i].iterator, index, path, sizeof(path));
+                                    file_reader->file_handle = fopen(path, "rb");
+                                    
+                                    if (file_reader->file_handle) {
+                                        file_reader_create_ui(file_reader, browser);
+                                        file_reader->img = lv_img_create(file_reader->text_area);
+                                        lv_obj_set_size(file_reader->img, 240, 176);
+                                        lv_obj_align(file_reader->img, LV_ALIGN_CENTER, 0, 0);
+                                        
+                                        uint8_t *img_buf = heap_caps_malloc(240 * 176 * 2, MALLOC_CAP_SPIRAM);
+                                        if (img_buf) {
+                                            lvgl_port_lock(0);
+                                            size_t rd = fread(img_buf, 1, 240 * 176 * 2, file_reader->file_handle);
+                                            if (rd == 240 * 176 * 2) {
+                                                file_img_dsc.data = img_buf;
+                                                lv_img_set_src(file_reader->img, &file_img_dsc);
+                                                lv_obj_invalidate(file_reader->img);
+                                            } else {
+                                                free(img_buf);
+                                                file_reader_close(file_reader);
+                                                ESP_LOGE(TAG, "Failed to read image data");
+                                            }
+                                            lvgl_port_unlock();
+                                            file_reader->is_reading = true;
+                                        }
+                                    }
+                                }
+                                // 检查是否为文本文件
+                                else if (is_text_file(browser->tabs[i].files[index].name)) {
+                                        file_reader->is_reading = true;
+                                    // 确保阅读器UI已创建
+                                    if (!file_reader->read_screen) {
+                                        file_reader_create_ui(file_reader, browser);
+                                    }
+                                    // 打开文本文件
+                                    file_reader_open_file(file_reader, browser, new_path);
+   
+                                    
+                                } else {
+                                    // 不支持的文件类型
+                                    if (!file_reader->read_screen) {
+                                        file_reader_create_ui(file_reader, browser);
+                                    }
+                                    lv_textarea_set_text(file_reader->text_area, 
+                                        "不支持的文件类型\n\n只支持文本文件:\n.txt, .c, .h, .cpp, .md等");
+                                    file_reader->is_reading = true;
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+                break;
+        }
+        
+        // // 书签菜单项处理
+        // lv_obj_t *parent = lv_obj_get_parent(target);
+        // if (parent && lv_obj_check_type(parent, &lv_list_class)) {
+        //     lv_obj_t *grandparent = lv_obj_get_parent(parent);
+        //     if (grandparent && lv_obj_get_user_data(grandparent) == (void*)BUTTON_BOOKMARKS) {
+        //         // 书签菜单中的按钮 - 保存当前滚动位置
+        //         save_scroll_position(browser, browser->active_tab);
+                
+        //         int bookmark_index = (intptr_t)lv_obj_get_user_data(target);
+        //         if (bookmark_index >= 0 && bookmark_index < browser->bookmark_count) {
+        //             multi_dir_browser_open_dir(browser, browser->active_tab, 
+        //                                       browser->bookmarks[bookmark_index].path);
+        //             lv_obj_del(grandparent); // 关闭书签菜单
+        //         }
+        //     }
+        // }
+    }
+    
+    // 标签页切换事件 - 保存当前标签页的滚动位置
+    if (code == LV_EVENT_VALUE_CHANGED && target == browser->tabview) {
+        int old_tab = browser->active_tab;
+        browser->active_tab = lv_tabview_get_tab_act(browser->tabview);
+        
+        // 保存旧标签页的滚动位置
+        if (old_tab >= 0 && old_tab < browser->tab_count) {
+            save_scroll_position(browser, old_tab);
+        }
+        
+        // 恢复新标签页的滚动位置
+        restore_scroll_position(browser, browser->active_tab);
+    }
+}
+
+void btn_close_cb(lv_event_t * e)
+{
+    ESP_LOGI(TAG,"btn_close clicked");
+    xEventGroupSetBits(ui_event_group,UI_DESKTOP_BIT);
+}
+
+
+// 加载文件内容
+static bool file_reader_load_file(file_reader_t *fr, const char *path) {
+    FILE *file = fopen(path, "r");
+    if (!file) {
+        ESP_LOGE(TAG, "Failed to open file: %s, error: %s", path, strerror(errno));
+        return false;
+    }
+    
+    // 关闭之前打开的文件
+    if (fr->file_handle) {
+        fclose(fr->file_handle);
+        fr->file_handle = NULL;
+    }
+    
+    // 释放之前的内容
+    if (fr->lines) {
+        for (int i = 0; i < fr->total_lines; i++) {
+            if (fr->lines[i]) {
+                free(fr->lines[i]);
+                fr->lines[i] = NULL;
+            }
+        }
+        free(fr->lines);
+        fr->lines = NULL;
+    }
+    
+    fr->file_handle = file;
+    fr->total_lines = 0;
+    fr->current_line = 0;
+    fr->page_start = 0;
+    strlcpy(fr->file_path, path, sizeof(fr->file_path));
+    
+    // 第一次遍历计算行数
+    char buffer[256];//设置一行的缓冲区
+    size_t line_count = 0;
+    //每次读一行，读取成功就行数加一，缓冲区满了也返回
+    while (fgets(buffer, sizeof(buffer), file) != NULL) {
+        line_count++;
+    }
+    //如果最后一行没有换行符，那就会少算一行，这里补上
+     // 如果文件不为空但最后一行没有换行符，需要额外计数
+    if (line_count > 0) {
+        rewind(file);
+        for (size_t i = 0; i < line_count - 1; i++) {
+            if (!fgets(buffer, sizeof(buffer), file)) break;
+        }
+        // 读取最后一行
+        if (fgets(buffer, sizeof(buffer), file) && buffer[0] != '\0') {
+            if (strchr(buffer, '\n') == NULL) {
+                line_count++; // 最后一行没有换行符
+            }
+        }
+    }
+    fr->total_lines = line_count;
+
+    if (fr->total_lines == 0) {
+        fclose(file);
+        fr->file_handle = NULL;
+        return true; // 空文件不算错误
+    }
+
+    // 分配内存存储所有行
+    fr->lines = malloc(fr->total_lines * sizeof(char *));
+    if (!fr->lines) {
+        ESP_LOGE(TAG, "Failed to allocate memory for lines");
+        fclose(file);
+        fr->file_handle = NULL;
+        return false;
+    }
+
+  // 初始化指针
+    for (int i = 0; i < fr->total_lines; i++) {
+        fr->lines[i] = NULL;
+    }
+
+    //把文件位置指针 重置到文件开头
+    // 重新读取文件并存储每一行
+    rewind(file);
+    for (int i = 0; i < fr->total_lines; i++) {
+        if (fgets(buffer, sizeof(buffer), file) != NULL) {
+            // 移除换行符
+            size_t len = strcspn(buffer, "\r\n");
+            buffer[len] = '\0';
+            
+            fr->lines[i] = malloc(len + 1);
+            if (fr->lines[i]) {
+                strcpy(fr->lines[i], buffer);
+            } else {
+                ESP_LOGE(TAG, "Failed to allocate memory for line %d", i);
+                // 清理已分配的内存
+                for (int j = 0; j < i; j++) {
+                    free(fr->lines[j]);
+                }
+                free(fr->lines);
+                fr->lines = NULL;
+                fclose(file);
+                fr->file_handle = NULL;
+                return false;
+            }
+        } else {
+            // 读取失败，调整总行数
+            fr->total_lines = i;
+            break;
+        }
+    }
+    
+    ESP_LOGI(TAG, "Loaded file: %s, total lines: %d", path, fr->total_lines);
+    return true;
+}
+
+// 显示当前页的内容
+static void file_reader_display_page(file_reader_t *fr) {
+    if (!fr->lines || fr->total_lines == 0) {
+        lv_textarea_set_text(fr->text_area, "file is empty or read failed");
+        ESP_LOGW(TAG, "No lines to display");
+        return;
+    }
+    
+    // 计算当前页的起始和结束行
+    int start_line = fr->page_start;
+    int end_line = start_line + fr->lines_per_page;
+    if (end_line > fr->total_lines) {
+        end_line = fr->total_lines;
+    }
+    
+    /// 构建显示内容 - 使用动态分配避免栈溢出
+    size_t buffer_size = fr->lines_per_page * 256;
+    char *display_text = malloc(buffer_size);
+    if (!display_text) {
+        lv_textarea_set_text(fr->text_area, "mem not enough");
+        return;
+    }
+    display_text[0] = '\0'; // 初始化空字符串
+     for (int i = start_line; i < end_line; i++) {
+        if (fr->lines[i]) {
+            // 添加行号
+            char line_buffer[300];
+            snprintf(line_buffer, sizeof(line_buffer), "%3d: %s\n", i + 1, fr->lines[i]);
+            
+            // 检查是否会溢出
+            if (strlen(display_text) + strlen(line_buffer) < buffer_size - 1) {
+                strcat(display_text, line_buffer);
+            } else {
+                strcat(display_text, "...\n[内容过长被截断]");
+                break;
+            }
+        }
+    }
+    //设置一页
+    lv_textarea_set_text(fr->text_area, display_text);
+    lv_textarea_set_cursor_pos(fr->text_area, 0);
+    lv_obj_scroll_to_y(fr->text_area, 0, LV_ANIM_OFF);
+
+    free(display_text);
+    
+    // 更新状态标签
+    int current_page = (fr->page_start / fr->lines_per_page) + 1;
+    int total_pages = (fr->total_lines + fr->lines_per_page - 1) / fr->lines_per_page;
+    char status_text[50];
+    snprintf(status_text, sizeof(status_text), "%d/%d\npage",current_page, total_pages);
+    lv_label_set_text(fr->status_label, status_text);
+    
+    // 更新按钮状态
+    lv_obj_clear_state(fr->prev_btn, LV_STATE_DISABLED);
+    lv_obj_clear_flag(fr->prev_btn, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_state(fr->next_btn, LV_STATE_DISABLED);
+    lv_obj_clear_flag(fr->next_btn, LV_OBJ_FLAG_HIDDEN);
+    if (fr->page_start <= 0) {
+        lv_obj_add_state(fr->prev_btn, LV_STATE_DISABLED);
+        lv_obj_add_flag(fr->prev_btn,LV_OBJ_FLAG_HIDDEN);
+    }
+    
+    if (fr->page_start + fr->lines_per_page >= fr->total_lines) {
+        lv_obj_add_state(fr->next_btn, LV_STATE_DISABLED);
+        lv_obj_add_flag(fr->next_btn,LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+
+// 创建文件阅读界面
+static void file_reader_create_ui(file_reader_t *fr, multi_dir_browser_t *browser) {
+    
+    file_reader->lines_per_page = 10; // 每页显示10行
+    // 创建阅读界面
+    fr->read_screen = lv_obj_create(browser->main_screen);
+    lv_obj_add_style(fr->read_screen,&default_style,0);
+    lv_obj_set_style_bg_color(fr->read_screen, lv_color_hex(0x0), 0);
+    lv_obj_set_size(fr->read_screen, LV_PCT(100), LV_PCT(100));
+    
+    // 创建底部栏
+    lv_obj_t *top_bar = lv_obj_create(fr->read_screen);
+    lv_obj_set_size(top_bar, LV_PCT(100), 40);
+    lv_obj_align(top_bar, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_style_bg_color(top_bar, lv_color_hex(0xffffff), 0);
+    lv_obj_set_style_border_width(top_bar, 0, 0);
+    lv_obj_set_scrollbar_mode(top_bar,LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_style_border_width(top_bar,0,0);
+
+    // 创建返回按钮
+    fr->back_btn = lv_btn_create(top_bar);
+    lv_obj_set_size(fr->back_btn, 80, 30);
+    lv_obj_set_style_bg_opa(fr->back_btn,LV_OPA_0,0);
+    lv_obj_set_style_shadow_opa(fr->back_btn,LV_OPA_0,0);
+    lv_obj_set_style_border_opa(fr->back_btn,LV_OPA_0,0);
+    lv_obj_align(fr->back_btn, LV_ALIGN_CENTER,0, 0);
+    lv_obj_add_event_cb(fr->back_btn,multi_dir_browser_handle_event,LV_EVENT_CLICKED,NULL);
+
+    lv_obj_t *back_label = lv_label_create(fr->back_btn);
+    lv_label_set_text(back_label,"Back");
+    lv_obj_set_align(back_label,LV_ALIGN_CENTER);
+    lv_obj_set_style_text_font(back_label,&lv_font_montserrat_20,0);
+    lv_obj_set_style_text_color(back_label, lv_color_black(), 0);
+    
+        
+    // 创建上一页按钮
+    fr->prev_btn = lv_btn_create(top_bar);
+    lv_obj_set_size(fr->prev_btn, 80, 30);
+    lv_obj_set_style_bg_opa(fr->prev_btn,LV_OPA_0,0);
+    lv_obj_set_style_shadow_opa(fr->prev_btn,LV_OPA_0,0);
+    lv_obj_set_style_border_opa(fr->prev_btn,LV_OPA_0,0);
+    lv_obj_align(fr->prev_btn, LV_ALIGN_LEFT_MID,0, 0);
+    lv_obj_add_event_cb(fr->prev_btn,multi_dir_browser_handle_event,LV_EVENT_CLICKED,NULL);
+
+    lv_obj_t *prev_label = lv_label_create(fr->prev_btn);
+    lv_label_set_text(prev_label,"Prev");
+    lv_obj_set_style_text_font(prev_label,&lv_font_montserrat_20,0);
+    lv_obj_set_style_text_color(prev_label, lv_color_black(), 0);
+    lv_obj_set_align(prev_label,LV_ALIGN_CENTER);
+   
+    // 创建下一页按钮
+    fr->next_btn = lv_btn_create(top_bar);
+    lv_obj_set_size(fr->next_btn, 80, 30);
+    lv_obj_set_style_bg_opa(fr->next_btn,LV_OPA_0,0);
+    lv_obj_set_style_shadow_opa(fr->next_btn,LV_OPA_0,0);
+    lv_obj_set_style_border_opa(fr->next_btn,LV_OPA_0,0);
+    lv_obj_align(fr->next_btn, LV_ALIGN_RIGHT_MID,0, 0);
+    lv_obj_add_event_cb(fr->next_btn,multi_dir_browser_handle_event,LV_EVENT_CLICKED,NULL);
+
+    lv_obj_t *next_label = lv_label_create(fr->next_btn);
+    lv_label_set_text(next_label,"Next");
+    lv_obj_set_style_text_font(next_label,&lv_font_montserrat_20,0);
+    lv_obj_set_style_text_color(next_label, lv_color_black(), 0);
+    lv_obj_set_align(next_label,LV_ALIGN_CENTER);
+
+    // 创建状态标签
+    fr->status_label = lv_label_create(top_bar);
+    lv_obj_set_style_text_color(fr->status_label, lv_color_hex(0xf80000), 0);
+    lv_obj_set_style_text_font(fr->status_label, &lv_font_montserrat_14, 0);
+    lv_obj_align(fr->status_label, LV_ALIGN_CENTER, 60, 0);
+
+    // // 创建文本区域
+    fr->text_area = lv_textarea_create(fr->read_screen);
+    lv_obj_set_size(fr->text_area, 320, 195);
+    lv_obj_align(fr->text_area, LV_ALIGN_BOTTOM_MID,0,-45);
+    lv_textarea_set_text(fr->text_area, "");
+    lv_obj_set_style_text_color(fr->text_area, lv_color_black(), 0);
+    lv_obj_set_style_border_width(fr->text_area,0,0);
+    lv_obj_set_style_bg_color(fr->text_area, lv_color_hex(0xffffff), 0);
+    lv_textarea_set_align(fr->text_area, LV_TEXT_ALIGN_LEFT);
+    // lv_textarea_set_accepted_chars(fr->text_area, NULL);//字符限制，限制为第二个输入的参数，如果为NULL就不限制
+    // lv_textarea_set_one_line(fr->text_area, false);//设置为多行输入模式，true单行，即按回车就发送，false 多行，回车是换行
+    lv_textarea_set_password_mode(fr->text_area, false);
+    lv_textarea_set_cursor_click_pos(fr->text_area, false);
+    lv_obj_clear_flag(fr->text_area, LV_OBJ_FLAG_CLICKABLE);
+    lv_textarea_set_cursor_pos(fr->text_area, 0);
+    lv_obj_scroll_to_y(fr->text_area, 0, LV_ANIM_OFF);
+    lv_obj_set_scrollbar_mode(fr->text_area,LV_SCROLLBAR_MODE_OFF);
+    // 设置文本区域的字体
+    static lv_style_t text_style;
+    lv_style_init(&text_style);
+    lv_style_set_text_font(&text_style, &lv_font_montserrat_14);
+    // lv_style_set_text_line_space(&text_style, 4);//设置行间距，单行模式无效
+    lv_obj_add_style(fr->text_area, &text_style, 0);
+
+        
+
+}
+
+// 打开文件阅读器
+static error_t file_reader_open_file(file_reader_t *fr, multi_dir_browser_t *browser, const char *path) {
+    
+    ESP_LOGI(TAG, "Attempting to open file: %s", path);
+    if (!file_reader_load_file(fr, path)) {
+        // 显示错误信息
+        lv_textarea_set_text(fr->text_area, "open failed !");
+        ESP_LOGE(TAG, "Failed to load file: %s", path);
+        return ESP_FAIL;
+    }
+    // 显示一页
+    file_reader_display_page(fr);
+    ESP_LOGI(TAG, "File reader opened successfully: %s", path);
+    return ESP_OK;
+}
+
+//文件阅读器关闭函数
+static void file_reader_close(file_reader_t *fr) {
+    ESP_LOGI(TAG, "Closing file reader");
+    
+    if (fr->file_handle) {
+        fclose(fr->file_handle);
+        fr->file_handle = NULL;
+    }
+    
+    if (fr->lines) {
+        for (int i = 0; i < fr->total_lines; i++) {
+            if (fr->lines[i]) {
+                free(fr->lines[i]);
+                fr->lines[i] = NULL;
+            }
+        }
+        free(fr->lines);
+        fr->lines = NULL;
+    }
+    
+    // 清理图片数据
+    if (file_img_dsc.data) {
+        free((void*)file_img_dsc.data);
+        file_img_dsc.data = NULL;
+    }
+    
+    fr->total_lines = 0;
+    fr->current_line = 0;
+    fr->page_start = 0;
+    fr->is_reading = false;
+    fr->file_path[0] = '\0';
+}
+
+//处理文件阅读器事件
+static void file_reader_handle_event(lv_event_t *e, multi_dir_browser_t *browser) {
+    lv_obj_t *target = lv_event_get_target(e);
+    lv_event_code_t code = lv_event_get_code(e);
+    
+    if (code == LV_EVENT_CLICKED) {
+        // 返回按钮
+        if (target == file_reader->back_btn) {
+
+            lv_obj_delete(file_reader->read_screen);
+            file_reader->read_screen = NULL;
+            file_reader_close(file_reader);
+            return;
+        }
+        
+        // 上一页按钮
+        if (target == file_reader->prev_btn) {
+            if (file_reader->page_start >= file_reader->lines_per_page) {
+                file_reader->page_start -= file_reader->lines_per_page;
+                file_reader_display_page(file_reader);
+            }
+            return;
+        }
+        
+        // 下一页按钮
+        if (target == file_reader->next_btn) {
+            if (file_reader->page_start + file_reader->lines_per_page < file_reader->total_lines) {
+                file_reader->page_start += file_reader->lines_per_page;
+                file_reader_display_page(file_reader);
+            }
+            return;
+        }
+    }
+}
+
+// 检查文件是否为可读的文本文件
+bool is_text_file(const char *filename) {
+    const char *text_extensions[] = {
+        ".txt", ".c", ".h", ".cpp", ".hpp", ".md", 
+        ".log", ".ini", ".conf", ".json", ".xml", ".html",
+        ".css", ".js", ".py", ".java", ".php", ".sh",
+        ".bat", ".cfg", ".yml", ".yaml", ".md", ".rst",
+        ".bin",
+        NULL
+    };
+    
+    const char *dot = strrchr(filename, '.');
+    if (!dot) return false;
+    
+    for (int i = 0; text_extensions[i] != NULL; i++) {
+        if (strcasecmp(dot, text_extensions[i]) == 0) {
+            ESP_LOGI(TAG,"open %s file",text_extensions[i]);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool is_img_file(const char *filename)
+{
+    const char *dot = strrchr(filename, '.');
+    if (!dot) return false;
+        if (strcasecmp(dot, ".pic") == 0) {
+            return true;
+        }
+    return false;
+}
+
+void app_filesystem_ui_init(void)
+{
+    file_reader = heap_caps_calloc(1, sizeof(file_reader_t),MALLOC_CAP_DEFAULT);
+    memset(file_reader, 0, sizeof(file_reader_t));
+    
+    
+    multi_dir_control = heap_caps_calloc(1, sizeof(multi_dir_browser_t),MALLOC_CAP_DEFAULT);
+    lvgl_port_lock(0);
+    init_styles(multi_dir_control);
+    // readfile_ui_page = lv_obj_create(lv_scr_act());
+    filesystem_ui_page = lv_obj_create(lv_scr_act());
+    lv_obj_add_style(filesystem_ui_page, &default_style, LV_PART_MAIN);
+    // lv_obj_add_style(readfile_ui_page, &default_style, LV_PART_MAIN);
+    // 设置屏幕背景
+    lv_obj_set_style_bg_color(filesystem_ui_page, lv_color_hex(0x0), 0);
+    lv_obj_set_style_bg_opa(filesystem_ui_page, LV_OPA_COVER, 0);
+
+    multi_dir_control->main_screen = lv_obj_create(filesystem_ui_page);
+    lv_obj_add_style(multi_dir_control->main_screen,&multi_dir_control->style_bg,0);
+    lv_obj_set_style_bg_color(multi_dir_control->main_screen,lv_color_hex(0x0),0);
+    lv_obj_set_scrollbar_mode(multi_dir_control->main_screen, LV_SCROLLBAR_MODE_OFF); // 隐藏setting_list滚动条
+
+
+    //创建标签视图
+    multi_dir_control->tabview = lv_tabview_create(multi_dir_control->main_screen);
+    lv_obj_set_size(multi_dir_control->tabview, 320, 240);
+    lv_tabview_set_tab_bar_size(multi_dir_control->tabview,40);
+    lv_obj_set_scrollbar_mode(multi_dir_control->tabview, LV_SCROLLBAR_MODE_OFF); // 隐藏setting_list滚动条
+
+    // 添加默认标签页
+    multi_dir_control->tab_count = 1;
+    multi_dir_control->active_tab = 0;
+
+    // 初始化第一个目录标签页
+    multi_dir_control->tabs[0].tab = lv_tabview_add_tab(multi_dir_control->tabview, "Home");
+    lv_obj_set_scrollbar_mode(multi_dir_control->tabs[0].tab, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_size(multi_dir_control->tabs[0].tab,320,240);
+    lv_obj_set_style_pad_all(multi_dir_control->tabs[0].tab,0,0);
+    lv_obj_set_style_pad_gap(multi_dir_control->tabs[0].tab, 0, 0);
+
+    // 创建第一个目录路径标签
+    multi_dir_control->tabs[0].path_label = lv_label_create(multi_dir_control->tabs[0].tab);
+    lv_obj_add_style(multi_dir_control->tabs[0].path_label, &multi_dir_control->style_label, 0);
+    lv_label_set_text(multi_dir_control->tabs[0].path_label, "/sdcard");
+    lv_obj_align(multi_dir_control->tabs[0].path_label, LV_ALIGN_TOP_LEFT, 0, 0);
+    
+    // 创建文件列表
+    multi_dir_control->tabs[0].file_list = lv_list_create(multi_dir_control->tabs[0].tab);
+    lv_obj_add_style(multi_dir_control->tabs[0].file_list,&multi_dir_control->style_list,0);
+    lv_obj_set_size(multi_dir_control->tabs[0].file_list, LV_PCT(100), LV_PCT(100));
+    lv_obj_align(multi_dir_control->tabs[0].file_list, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_set_scrollbar_mode(multi_dir_control->tabs[0].file_list, LV_SCROLLBAR_MODE_OFF); // 隐藏setting_list滚动条
+    lv_obj_set_style_pad_right(multi_dir_control->tabs[0].file_list, 0, LV_PART_SCROLLBAR);   /* 右侧预留 */
+    lv_obj_set_style_pad_left(multi_dir_control->tabs[0].file_list, 0, LV_PART_SCROLLBAR);    /* 左侧预留 */
+    
+
+
+    //返回桌面按钮
+    lv_obj_t * btn_bar = lv_tabview_get_tab_bar(multi_dir_control->tabview);
+    lv_obj_set_style_bg_opa(btn_bar, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(btn_bar, 0, 0);
+    lv_obj_set_style_shadow_width(btn_bar, 0, 0);
+    lv_obj_t * close_btn = lv_btn_create(btn_bar);
+    lv_obj_set_size(close_btn, 40, 40);
+    lv_obj_align(close_btn, LV_DIR_RIGHT, 0, 0);
+    lv_obj_set_style_bg_opa(close_btn, LV_OPA_TRANSP, 0);     
+    lv_obj_set_style_border_width(close_btn, 0, 0);          
+    lv_obj_set_style_shadow_width(close_btn, 0, 0);         
+    lv_obj_add_event_cb(close_btn, btn_close_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t * lbl = lv_label_create(close_btn);
+    lv_label_set_text(lbl, LV_SYMBOL_CLOSE);
+    lv_obj_set_style_text_font(lbl,&lv_font_montserrat_18,0);
+    lv_obj_set_align(lbl,LV_ALIGN_CENTER);
+    lv_obj_set_style_text_color(lbl, lv_color_black(), 0);   /* 纯黑 */
+    lv_obj_center(lbl);
+    
+
+    // 添加控制按钮容器
+    lv_obj_t *btn_container = lv_obj_create(multi_dir_control->main_screen);
+    lv_obj_remove_style_all(btn_container);
+    lv_obj_set_size(btn_container, LV_PCT(95), 40);
+    lv_obj_align(btn_container, LV_ALIGN_BOTTOM_MID, 0, -10);
+    lv_obj_set_flex_flow(btn_container, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(btn_container, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    
+    // // 添加新标签页按钮
+    // lv_obj_t *new_tab_btn = lv_btn_create(btn_container);
+    // lv_obj_set_size(new_tab_btn, 100, 30);
+    // lv_obj_t *new_tab_label = lv_label_create(new_tab_btn);
+    // lv_label_set_text(new_tab_label, "New Tab");
+    // lv_obj_center(new_tab_label);
+    // lv_obj_set_user_data(new_tab_btn, (void *)(intptr_t)BUTTON_NEW_TAB);
+    // lv_obj_add_event_cb(new_tab_btn, multi_dir_browser_handle_event, LV_EVENT_CLICKED, multi_dir_control);
+    
+    // // 添加书签按钮
+    // lv_obj_t *bookmark_btn = lv_btn_create(btn_container);
+    // lv_obj_set_size(bookmark_btn, 100, 30);
+    // lv_obj_t *bookmark_label = lv_label_create(bookmark_btn);
+    // lv_label_set_text(bookmark_label, "Bookmarks");
+    // lv_obj_center(bookmark_label);
+    // lv_obj_set_user_data(bookmark_btn, (void *)(intptr_t)BUTTON_BOOKMARKS);
+    // lv_obj_add_event_cb(bookmark_btn, multi_dir_browser_handle_event, LV_EVENT_CLICKED, multi_dir_control);
+    
+    // // 添加刷新按钮
+    // lv_obj_t *refresh_btn = lv_btn_create(btn_container);
+    // lv_obj_set_size(refresh_btn, 100, 30);
+    // lv_obj_t *refresh_label = lv_label_create(refresh_btn);
+    // lv_label_set_text(refresh_label, "Refresh");
+    // lv_obj_center(refresh_label);
+    // lv_obj_set_user_data(refresh_btn, (void *)(intptr_t)BUTTON_REFRESH);
+    // lv_obj_add_event_cb(refresh_btn, multi_dir_browser_handle_event, LV_EVENT_CLICKED, multi_dir_control);
+   
+
+    // 初始化默认目录
+    strlcpy(multi_dir_control->tabs[0].current_path, "/sdcard", sizeof(multi_dir_control->tabs[0].current_path));
+
+    multi_dir_browser_open_dir(multi_dir_control, 0, "/sdcard");
+    
+    // 加载默认书签
+    // multi_dir_browser_add_bookmark(multi_dir_control, "Root", "/sdcard");
+    // multi_dir_browser_add_bookmark(multi_dir_control, "Documents", "/sdcard/Documents");
+    // multi_dir_browser_add_bookmark(multi_dir_control, "Pictures", "/sdcard/Pictures");
+   
+    multi_dir_control->initialized = true;
+
+    // file_reader_create_ui(file_reader, multi_dir_control);
+
+    lvgl_port_unlock();
+    
+    
+
+
+}
+
+
+// 修改打开目录函数，添加滚动位置保存和恢复
+bool multi_dir_browser_open_dir(multi_dir_browser_t *browser, int tab_index, const char *path) {
+    if (tab_index < 0 || tab_index >= browser->tab_count) {
+        return false;
+    }
+
+    tab_t *tab = &browser->tabs[tab_index];
+    
+
+    //每次进来之前先free上一次的iterator
+    file_iterator_delete(tab->iterator);
+    tab->iterator = file_iterator_new(path);
+    
+
+
+    // 清空当前文件列表
+    if (tab->files) {
+        free(tab->files);
+        tab->files = NULL;
+    }
+    
+    // 清空UI列表
+    lv_obj_clean(tab->file_list);
+    // 保存当前滚动位置
+    save_scroll_position(browser, tab_index);
+    tab->files = malloc(tab->iterator->count * sizeof(file_info_t));
+    
+    if (!tab->files) {
+        ESP_LOGI(TAG,"Line 454 malloc failed");
+        return false;
+    }
+    // 更新当前路径
+    strlcpy(tab->current_path, path, sizeof(tab->current_path));
+    lv_label_set_text(tab->path_label, path);
+
+
+       
+    
+    
+    // 更新标签页标题
+    char *last_slash = strrchr(path, '/');
+    if (last_slash && strlen(last_slash) > 1) {
+        lv_tabview_rename_tab(browser->tabview, tab_index, last_slash + 1);
+    } else {
+        lv_tabview_rename_tab(browser->tabview, tab_index, "Root");
+    }
+
+    for(size_t i = 0; i<tab->iterator->count; i++)
+    {
+        tab->files[i].name = file_iterator_get_name_from_index(tab->iterator, i);
+        if ((strcasecmp(tab->files[i].name, ".") == 0) || (strcasecmp(tab->files[i].name, "..") == 0)) continue; // 跳过
+        char full_path[MAX_PATH_LEN];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, tab->files[i].name);
+        
+        // 获取文件信息
+        struct stat st;
+        if (stat(full_path, &st) == 0) {
+
+            tab->files[i].is_dir = S_ISDIR(st.st_mode);
+            tab->files[i].size = st.st_size;
+        }
+    }
+
+    // 添加返回上级目录按钮（如果不是根目录）
+    if (strcmp(path, "/sdcard") != 0 && strcmp(path, "/") != 0) {
+        lv_obj_t *btn = lv_list_add_btn(tab->file_list, LV_SYMBOL_LEFT, "..");
+        lv_obj_add_style(btn, &browser->style_list_btn, 0);
+        lv_obj_set_user_data(btn, (void *)(intptr_t)-1);
+        lv_obj_add_event_cb(btn, multi_dir_browser_handle_event, LV_EVENT_CLICKED, browser);
+    }
+
+    // 保存当前状态到历史记录
+    if (tab->history_count < MAX_HISTORY) {
+        strlcpy(tab->history[tab->history_count].path, tab->current_path, MAX_PATH_LEN);
+        tab->history[tab->history_count].scroll_pos = tab->scroll_pos;
+        tab->history[tab->history_count].selected_index = tab->selected_index;
+        tab->history_count++;
+        tab->history_index = tab->history_count - 1;
+    }
+    
+    // 添加文件和目录按钮
+    for (int i = 0; i < tab->iterator->count; i++) {
+        const char *icon = tab->files[i].is_dir ? LV_SYMBOL_DIRECTORY : LV_SYMBOL_FILE;
+        char btn_text[128];
+        char size_text[32];
+
+        // // 设置文件颜色
+        // lv_color_t text_color = lv_color_white();
+        // if (tab->files[i].is_dir) {
+        //     text_color = lv_color_hex(0x4FC3F7); // 目录用蓝色
+        // } else if (is_text_file(tab->files[i].name)) {
+        //     text_color = lv_color_hex(0x81C784); // 文本文件用绿色
+        // } else {
+        //     text_color = lv_color_hex(0xE0E0E0); // 其他文件用灰色
+        // 格式化文件大小
+        if (tab->files[i].is_dir) {
+            strcpy(size_text, "[DIR]");
+        } else if (tab->files[i].size < 1024) {
+            snprintf(size_text, sizeof(size_text), "%dB", tab->files[i].size);
+        } else if (tab->files[i].size < 1024 * 1024) {
+            snprintf(size_text, sizeof(size_text), "%.1fKB", tab->files[i].size / 1024.0);
+        } else {
+            snprintf(size_text, sizeof(size_text), "%.1fMB", tab->files[i].size / (1024.0 * 1024.0));
+        }
+        
+        
+        
+        snprintf(btn_text, sizeof(btn_text), " %s %s", tab->files[i].name, size_text);
+        
+        lv_obj_t *btn = lv_list_add_btn(tab->file_list, icon, btn_text);
+        lv_obj_set_size(btn,LV_PCT(100),40);
+        lv_obj_add_style(btn, &browser->style_list_btn, 0);
+        lv_obj_set_user_data(btn, (void *)(intptr_t)i);
+        lv_obj_add_event_cb(btn, multi_dir_browser_handle_event, LV_EVENT_CLICKED, browser);
+    }
+    
+    // 重置滚动位置和选择索引
+    tab->selected_index = 0;
+    
+    // 恢复滚动位置（如果是返回操作）
+    if (tab->scroll_pos > 0) {
+        restore_scroll_position(browser, tab_index);
+    } else {
+        lv_obj_scroll_to_y(tab->file_list, 0, LV_ANIM_OFF);
+    }
+
+    return true;
+}
+
+
+
+
+
+
+// 初始化桌面UI
+void app_filesystem_ui_deinit(void) 
+{
+    lvgl_port_lock(0);
+    free(multi_dir_control);
+    free(file_reader);
+    if(filesystem_ui_page != NULL)
+    {
+        lv_obj_delete(filesystem_ui_page);
+        filesystem_ui_page = NULL;
+    }
+    lvgl_port_unlock();
+}
+
+
+void app_filesystem_ui_register(void)
+{
+    ui_config_t *filesystem = malloc(sizeof(ui_config_t));
+    app_ui_create(filesystem,"FILESYSTEM",UI_FILESYSTEM,filesystem_ui_page,app_filesystem_ui_init,app_filesystem_ui_deinit);
+    app_ui_add(filesystem);
+}
+
+
+#pragma GCC diagnostic pop

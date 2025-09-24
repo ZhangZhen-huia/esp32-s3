@@ -1,0 +1,94 @@
+dependencies:
+  chmorgan/esp-file-iterator:
+    component_hash: 327091394b9ef5c2cd395a960ab70ae64479e0a8831cbd9925e38895fad93719
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.1.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.0
+  espressif/esp32-camera:
+    component_hash: b209707f12aff1683c5c9dfaff3fa60f0eca687f2bf74f133cdef68fbae86028
+    dependencies:
+    - name: espressif/esp_jpeg
+      registry_url: https://components.espressif.com
+      require: public
+      version: ^1.3.0
+    - name: idf
+      require: private
+      version: '>=5.1'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 2.1.2
+  espressif/esp_jpeg:
+    component_hash: defb83669293cbf86d0fa86b475ba5517aceed04ed70db435388c151ab37b5d7
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.3.1
+  espressif/esp_lcd_touch:
+    component_hash: 779b4ba2464a3ae85681e4b860caa5fdc35801458c23f3039ee761bae7f442a4
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4.2'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.1.2
+  espressif/esp_lcd_touch_ft5x06:
+    component_hash: abaec05f46a793549b60afdda9eff86e3c8e87782c8c169007911232388d2858
+    dependencies:
+    - name: espressif/esp_lcd_touch
+      registry_url: https://components.espressif.com
+      require: public
+      version: ^1.0.4
+    - name: idf
+      require: private
+      version: '>=4.4.2'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.7
+  espressif/esp_lvgl_port:
+    component_hash: e720c95cf0667554a204591bb5fade4655fb2990465557041200fa44b5bc7556
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4'
+    - name: lvgl/lvgl
+      registry_url: https://components.espressif.com
+      require: public
+      version: '>=8,<10'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 2.6.0
+  idf:
+    source:
+      type: idf
+    version: 5.4.1
+  lvgl/lvgl:
+    component_hash: b702d642e03e95928046d5c6726558e6444e112420c77efa5fdb6650b0a13c5d
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 9.3.0
+direct_dependencies:
+- chmorgan/esp-file-iterator
+- espressif/esp32-camera
+- espressif/esp_lcd_touch_ft5x06
+- espressif/esp_lvgl_port
+- idf
+- lvgl/lvgl
+manifest_hash: 2dee146dd4e0e8494b2a1f60f010f83950eb8fb34efa2c8299a9f7138d7c009e
+target: esp32s3
+version: 2.0.0

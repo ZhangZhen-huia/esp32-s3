@@ -1,0 +1,2 @@
+source /home/hui/esp_test/Item/build/gdbinit/symbols
+source /home/hui/esp_test/Item/build/gdbinit/connect
