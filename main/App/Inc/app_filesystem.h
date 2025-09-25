@@ -85,11 +85,7 @@ typedef struct
  // 状态标志
     bool initialized;
 }multi_dir_browser_t;
-typedef struct 
-{
-    multi_dir_browser_t *browser;
-    int index;
-}user_data_t;
+
 
 // 按钮标识枚举
 typedef enum {
@@ -124,7 +120,11 @@ typedef struct {
     bool is_reading;
 } file_reader_t;
 
-
+typedef struct 
+{
+    int file_index;
+    int tab_index;
+}user_data_t;
 
 void app_filesystem_ui_register(void);
 bool load_all_sd_imgs(void);

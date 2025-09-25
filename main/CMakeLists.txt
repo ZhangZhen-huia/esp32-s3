@@ -13,11 +13,11 @@ idf_component_register(SRCS "main.c"
                             "App/app_camera.c"
                             "App/app_setting.c"
                             "App/app_filesystem.c"
-                            "App/app_multidir.c"
                             "Dev/dev_registry.c"
                             "img/setting.c"
                             "img/camera.c"
                             "img/wifi.c"
                             "img/filesystem.c"
+                            "Font/font_alipuhui18.c"
                     PRIV_REQUIRES spi_flash nvs_flash esp_wifi fatfs
                     INCLUDE_DIRS "." "./App" "./Bsp" "./Dev" "./Font")
