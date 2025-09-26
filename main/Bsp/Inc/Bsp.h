@@ -9,4 +9,4 @@
 #include "sdcard.h"
 #include "wifi.h"
 #include "extend_io.h"
-
+#include "music.h"

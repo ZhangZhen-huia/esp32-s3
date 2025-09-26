@@ -554,6 +554,16 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
+  include("/home/hui/esp_test/Item/build/esp-idf/chmorgan__esp-libhelix-mp3/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("/home/hui/esp_test/Item/build/esp-idf/chmorgan__esp-audio-player/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
   include("/home/hui/esp_test/Item/build/esp-idf/chmorgan__esp-file-iterator/cmake_install.cmake")
 endif()
 
@@ -565,6 +575,11 @@ endif()
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
   include("/home/hui/esp_test/Item/build/esp-idf/espressif__esp32-camera/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("/home/hui/esp_test/Item/build/esp-idf/espressif__esp_codec_dev/cmake_install.cmake")
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)

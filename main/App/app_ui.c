@@ -33,12 +33,13 @@ void app_ui_Init(void)
 
 	//创建ui
 	app_main_ui_register();
-	app_wifi_ui_register();
+	// app_wifi_ui_register();
 	app_desktop_ui_register();
 	app_statusbar_ui_register();
 	app_camera_ui_register();
 	app_setting_ui_register();
 	app_filesystem_ui_register();
+	app_music_ui_register();
 	ui_event_group = xEventGroupCreate();
 	xTaskCreatePinnedToCore(app_ui_task,"app_ui_task",1024*5,NULL,2,NULL,1);
 
@@ -53,7 +54,7 @@ void app_ui_task(void *arg)
 	while(1)
 	{
 		EventBits_t ui_bits = xEventGroupWaitBits(	ui_event_group,
-													UI_MAIN_BIT|UI_WIFI_BIT|UI_DESKTOP_BIT|UI_CAMERA_BIT|UI_SETTING_BIT|UI_FILESYSTEM_BIT,
+													UI_MAIN_BIT|UI_WIFI_BIT|UI_DESKTOP_BIT|UI_CAMERA_BIT|UI_SETTING_BIT|UI_FILESYSTEM_BIT|UI_MUSIC_BIT,
 													pdTRUE,
 													pdFALSE,
 													portMAX_DELAY);
@@ -82,7 +83,10 @@ void app_ui_task(void *arg)
 		{
 			app_ui_display_by_id(UI_FILESYSTEM);
 		}
-		vTaskDelay(10/portTICK_PERIOD_MS);
+		else if(ui_bits & UI_MUSIC_BIT)
+		{
+			app_ui_display_by_id(UI_MUSIC);
+		}		
 	}
 }
 

@@ -149,7 +149,7 @@ void register_camera_device(void)
         .init_func = bsp_camera_init,
         .deinit_func = bsp_camera_deinit,
         .next = NULL,
-        .priority = 8,
+        .priority = DEVICE_CAMERA_PRIORITY,
         .type = DISPLAY,
         .state = DEVICE_STATE_UNINITIALIZED
     };

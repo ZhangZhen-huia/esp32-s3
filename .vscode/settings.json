@@ -85,6 +85,11 @@
     "format": "c",
     "stdbool.h": "c",
     "types.h": "c",
-    "spi_common.h": "c"
+    "spi_common.h": "c",
+    "music.h": "c",
+    "esp_codec_dev.h": "c",
+    "app_music.h": "c",
+    "user_config.h": "c",
+    "audio_player.h": "c"
   }
 }

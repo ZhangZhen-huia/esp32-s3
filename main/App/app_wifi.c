@@ -33,7 +33,9 @@ lv_obj_t *btn_delete_label;
 
 EventGroupHandle_t s_wifi_event_group;
 
-
+esp_event_handler_instance_t instance_any_id;
+esp_event_handler_instance_t instance_got_ip;
+esp_netif_t *sta_netif = NULL;
 uint16_t ap_count = 0;                      //定义热点数量
 uint16_t number = DEFAULT_SCAN_LIST_SIZE;   //定义默认最大扫描列表数量
 static int s_retry_num = 0;
@@ -551,10 +553,27 @@ void app_wifi_ui_deinit(void *)
         
     ESP_LOGI(TAG,"delete finish");
     lvgl_port_unlock();
+    device_deinitialize("Wifi");
     
 }
 
-
+// 清除wifi初始化内容
+static esp_err_t wifiset_deinit(void)
+{
+    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &instance_any_id));
+    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &instance_got_ip));
+    esp_err_t err = esp_wifi_stop();
+    if (err == ESP_ERR_WIFI_NOT_INIT) {
+        return err;
+    }
+    ESP_ERROR_CHECK(err);
+    ESP_ERROR_CHECK(esp_wifi_deinit());
+    ESP_ERROR_CHECK(esp_wifi_clear_default_wifi_driver_and_handlers(sta_netif));
+    esp_netif_destroy(sta_netif);
+    sta_netif = NULL;
+    ESP_ERROR_CHECK(esp_event_loop_delete_default());
+    return true;
+}
 
 
 
@@ -648,8 +667,8 @@ static esp_err_t wifi_sta_init(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     
     //创建wifi客户端接口
-    esp_netif_create_default_wifi_sta();
-
+    sta_netif = esp_netif_create_default_wifi_sta();
+    assert(sta_netif);
     //初始化wifi
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
      ESP_ERROR_CHECK(esp_wifi_init(&cfg));
@@ -657,8 +676,6 @@ static esp_err_t wifi_sta_init(void)
     // 注册事件处理函数（回调函数）到默认事件循环
     // 事件源（如WIFI_EVENT、IP_EVENT），事件ID，事件处理函数，传入处理函数的参数，回调处理函数的注册句柄
     // 同一个处理函数可以多次注册为不同的事件源
-    esp_event_handler_instance_t instance_any_id;
-    esp_event_handler_instance_t instance_got_ip;
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
                                                         &event_handler,
@@ -694,10 +711,10 @@ void register_wifi_device(void)
     {
         .name = "Wifi",
         .init_func = wifi_sta_init,
-        .deinit_func = NULL,
+        .deinit_func = wifiset_deinit,
         .next = NULL,
-        .priority = 4,
-        .state = DEVICE_STATE_UNINITIALIZED,
+        .priority = DEVICE_WIFI_PRIORITY,
+        .state = DEVICE_STATE_PENDING,
         .type = WIFI,
     };
 

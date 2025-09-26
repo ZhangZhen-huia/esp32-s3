@@ -30,7 +30,7 @@ void register_i2c_devices(void)
         .type = PROTOCOL,
         .init_func = bsp_i2c_init,
         .deinit_func = NULL,
-        .priority = 0, // 最高优先级
+        .priority = DEVICE_I2C_PRIORITY, // 最高优先级
         .state = DEVICE_STATE_UNINITIALIZED,
         .next = NULL
     };

@@ -86,7 +86,7 @@ void register_extend_io_devices(void)
         .type = IO,
         .init_func = pca9557_init,
         .deinit_func = NULL,
-        .priority = 1, // 最高优先级
+        .priority = DEVICE_EXTENDIO_PRIORITY, // 最高优先级
         .state = DEVICE_STATE_UNINITIALIZED,
         .next = NULL
     };

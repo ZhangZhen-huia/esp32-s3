@@ -5,11 +5,9 @@
 #include <time.h>
 #include <sys/stat.h>   
 #include <sys/types.h>  
-#define USING_CHINESE 1
+#include "user_config.h"
 
-#if USING_CHINESE
-LV_FONT_DECLARE(font_alipuhui18);
-#endif
+
 
 const static char *TAG = "filesystem";
 #pragma GCC diagnostic push
@@ -19,6 +17,7 @@ lv_obj_t *filesystem_ui_page;
 multi_dir_browser_t *multi_dir_control;
 file_reader_t *file_reader;
 user_data_t *user_data;
+
 static lv_img_dsc_t file_img_dsc = 
 {
     .header.w = 240,
@@ -881,7 +880,7 @@ bool multi_dir_browser_open_dir(multi_dir_browser_t *browser, int tab_index, con
     } else {
         lv_tabview_rename_tab(browser->tabview, tab_index, "Root");
     }
-
+    char full_path[MAX_PATH_LEN];
     for(size_t i = 0; i<tab->iterator->count; i++)
     {
         tab->files[i].name = file_iterator_get_name_from_index(tab->iterator, i);
@@ -890,7 +889,7 @@ bool multi_dir_browser_open_dir(multi_dir_browser_t *browser, int tab_index, con
             tab->files[i].is_dir = true;
             continue;
         }
-        char full_path[MAX_PATH_LEN];
+        
         snprintf(full_path, sizeof(full_path), "%s/%s", path, tab->files[i].name);
         
         // 获取文件信息
@@ -921,7 +920,6 @@ bool multi_dir_browser_open_dir(multi_dir_browser_t *browser, int tab_index, con
     // 添加文件和目录按钮
     for (int i = 0; i < tab->iterator->count; i++) {
         if ((strcasecmp(tab->files[i].name, "system Volume Information") == 0) || (strcasecmp(tab->files[i].name, "FOUND.000") == 0)) continue;
-        char full_path[MAX_PATH_LEN];
         const char *icon = tab->files[i].is_dir ? "\uf07b" : "\uf15b";
         char btn_text[128];
         char size_text[32];

@@ -312,7 +312,7 @@ void register_Lcd_devices(void)
         .type = DISPLAY,
         .init_func = bsp_lvgl_start,
         .deinit_func = NULL,
-        .priority = 2, // 最高优先级
+        .priority = DEVICEE_LCD_PRIORITY, 
         .state = DEVICE_STATE_UNINITIALIZED,
         .next = NULL
     };

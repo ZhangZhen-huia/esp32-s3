@@ -17,7 +17,7 @@
 #include "Inc/app_camera.h"
 #include "Inc/app_setting.h"
 #include "Inc/app_filesystem.h"
-
+#include "Inc/app_music.h"
 
 #define UI_WIFI_BIT        BIT0
 #define UI_SETTING_BIT     BIT1
@@ -25,6 +25,8 @@
 #define UI_DESKTOP_BIT     BIT3
 #define UI_MAIN_BIT        BIT4
 #define UI_FILESYSTEM_BIT  BIT5
+#define UI_MUSIC_BIT       BIT6
+
 
 
 typedef enum
@@ -35,7 +37,8 @@ typedef enum
     UI_DESKTOP,
     UI_STATUSBAR,
     UI_SETTING,
-    UI_FILESYSTEM
+    UI_FILESYSTEM,
+    UI_MUSIC
 }ui_id_e;
 
 typedef enum{

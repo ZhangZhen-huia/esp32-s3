@@ -56,7 +56,7 @@ static void jump_exec(void *var, int32_t v)
 
 void app_main_ui_init(void *)
 {
-
+    device_initialize("Wifi");
     lvgl_port_lock(0);
     static lv_style_t style;
     lv_style_init(&style);
@@ -142,7 +142,30 @@ void app_main_ui_register(void)
     app_ui_add(main);
 
 }
+// #include "esp_intr_alloc.h"
+// #include "driver/i2s.h"
+// #include "driver/spi_master.h"
 
+// void check_dma_conflict(void)
+// {
+//     /* 1. 查看当前已绑定的中断 */
+//     int i2s_intr = ETS_I2S0_INTR_SOURCE;
+//     int spi_intr = ETS_SPI2_INTR_SOURCE;
+//     int wifi_mac = ETS_WIFI_MAC_INTR_SOURCE;
+
+//     printf("I2S0  intr = %d\n", i2s_intr);
+//     printf("SPI2  intr = %d\n", spi_intr);
+//     printf("WiFi  intr = %d\n", wifi_mac);
+
+//     /* 2. 查看 DMA 通道（ESP32-S3 为例）*/
+//     spi_dma_chan_t spi_dma;
+//     spi_bus_get_dma_chan(HSPI_HOST, &spi_dma);
+//     printf("SPI2  DMA  = %d\n", spi_dma);
+
+//     i2s_dma_chan_t i2s_dma;
+//     i2s_get_dma_chan(I2S_NUM_0, &i2s_dma);
+//     printf("I2S0  DMA  = %d\n", i2s_dma);
+// }
 void app_main(void)
 {
 

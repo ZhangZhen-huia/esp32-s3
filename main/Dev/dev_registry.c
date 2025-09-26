@@ -4,6 +4,7 @@
 #include "Bsp/Inc/Bsp.h"
 #include "Inc/app_wifi.h"
 #include "Inc/app_filesystem.h"
+
 static const char *TAG = "DeviceRegistry";
 
 // 设备链表头指针
@@ -21,6 +22,7 @@ void register_all_devices(void) {
     register_wifi_device();
     register_sdcard_device();
     register_camera_device();
+    register_music_device();
     // 添加其他设备的注册函数调用
 }
 

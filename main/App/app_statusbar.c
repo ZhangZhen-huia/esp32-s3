@@ -9,7 +9,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-// static status_bar_t status_bar;
+status_bar_t *status_bar;
 lv_obj_t *statusbar_ui_page;
 // // static lv_obj_t *main_screen;
 
@@ -101,65 +101,65 @@ lv_obj_t *statusbar_ui_page;
 //     }
 // }
 
-// // 初始化状态栏
-// void ui_status_bar_init(void *) {
+// 初始化状态栏
+void app_statusbar_ui_init(void *) {
 
-//     statusbar_ui_page = lv_obj_create(lv_scr_act());
-//     lv_obj_add_style(statusbar_ui_page,&default_style,0);
+    statusbar_ui_page = lv_obj_create(lv_scr_act());
+    lv_obj_add_style(statusbar_ui_page,&default_style,0);
     
-//     // 创建状态栏容器
-//     sb->bar = lv_obj_create(parent);
-//     lv_obj_set_size(sb->bar, LV_PCT(100), STATUS_BAR_HEIGHT);
-//     lv_obj_align(sb->bar, LV_ALIGN_TOP_MID, 0, 0);
+    // 创建状态栏容器
+    status_bar->bar = lv_obj_create(statusbar_ui_page);
+    lv_obj_set_size(status_bar->bar, LV_PCT(100), STATUS_BAR_HEIGHT);
+    lv_obj_align(status_bar->bar, LV_ALIGN_TOP_MID, 0, 0);
     
-//     // 设置样式
-//     lv_obj_set_style_bg_color(sb->bar, lv_color_hex(0x1a1a1a), 0);
-//     lv_obj_set_style_bg_opa(sb->bar, LV_OPA_90, 0);
-//     lv_obj_set_style_border_width(sb->bar, 0, 0);
-//     lv_obj_set_style_radius(sb->bar, 0, 0);
-//     lv_obj_set_style_pad_all(sb->bar, 5, 0);
+    // 设置样式
+    lv_obj_set_style_bg_color(status_bar->bar, lv_color_hex(0x1a1a1a), 0);
+    lv_obj_set_style_bg_opa(status_bar->bar, LV_OPA_90, 0);
+    lv_obj_set_style_border_width(status_bar->bar, 0, 0);
+    lv_obj_set_style_radius(status_bar->bar, 0, 0);
+    lv_obj_set_style_pad_all(status_bar->bar, 5, 0);
     
-//     // 创建内容容器（初始隐藏）
-//     sb->content = lv_obj_create(sb->bar);
-//     lv_obj_set_size(sb->content, LV_PCT(100), LV_PCT(100));
-//     lv_obj_align(sb->content, LV_ALIGN_TOP_MID, 0, STATUS_BAR_HEIGHT);
-//     lv_obj_set_style_bg_opa(sb->content, LV_OPA_0, 0);
-//     lv_obj_set_style_border_width(sb->content, 0, 0);
-//     lv_obj_add_flag(sb->content, LV_OBJ_FLAG_HIDDEN);
+    // 创建内容容器（初始隐藏）
+    status_bar->content = lv_obj_create(status_bar->bar);
+    lv_obj_set_size(status_bar->content, LV_PCT(100), LV_PCT(100));
+    lv_obj_align(status_bar->content, LV_ALIGN_TOP_MID, 0, STATUS_BAR_HEIGHT);
+    lv_obj_set_style_bg_opa(status_bar->content, LV_OPA_0, 0);
+    lv_obj_set_style_border_width(status_bar->content, 0, 0);
+    lv_obj_add_flag(status_bar->content, LV_OBJ_FLAG_HIDDEN);
     
-//     // 创建时间显示（在状态栏顶部）
-//     sb->time_label = lv_label_create(sb->bar);
-//     lv_label_set_text(sb->time_label, "12:00");
-//     lv_obj_set_style_text_color(sb->time_label, lv_color_white(), 0);
-//     lv_obj_set_style_text_font(sb->time_label, &lv_font_montserrat_14, 0);
-//     lv_obj_align(sb->time_label, LV_ALIGN_TOP_LEFT, 10, 8);
+    // 创建时间显示（在状态栏顶部）
+    status_bar->time_label = lv_label_create(status_bar->bar);
+    lv_label_set_text(status_bar->time_label, "12:00");
+    lv_obj_set_style_text_color(status_bar->time_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(status_bar->time_label, &lv_font_montserrat_14, 0);
+    lv_obj_align(status_bar->time_label, LV_ALIGN_TOP_LEFT, 10, 8);
     
-//     // 创建电池显示
-//     sb->battery_label = lv_label_create(sb->bar);
-//     lv_label_set_text(sb->battery_label, "100%");
-//     lv_obj_set_style_text_color(sb->battery_label, lv_color_white(), 0);
-//     lv_obj_set_style_text_font(sb->battery_label, &lv_font_montserrat_14, 0);
-//     lv_obj_align(sb->battery_label, LV_ALIGN_TOP_RIGHT, -10, 8);
+    // 创建电池显示
+    status_bar->battery_label = lv_label_create(status_bar->bar);
+    lv_label_set_text(status_bar->battery_label, "100%");
+    lv_obj_set_style_text_color(status_bar->battery_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(status_bar->battery_label, &lv_font_montserrat_14, 0);
+    lv_obj_align(status_bar->battery_label, LV_ALIGN_TOP_RIGHT, -10, 8);
     
-//     // 创建Wi-Fi状态
-//     sb->wifi_label = lv_label_create(sb->bar);
-//     lv_label_set_text(sb->wifi_label, LV_SYMBOL_WIFI);
-//     lv_obj_set_style_text_color(sb->wifi_label, lv_color_white(), 0);
-//     lv_obj_set_style_text_font(sb->wifi_label, &lv_font_montserrat_14, 0);
-//     lv_obj_align(sb->wifi_label, LV_ALIGN_TOP_RIGHT, -50, 8);
+    // 创建Wi-Fi状态
+    status_bar->wifi_label = lv_label_create(status_bar->bar);
+    lv_label_set_text(status_bar->wifi_label, LV_SYMBOL_WIFI);
+    lv_obj_set_style_text_color(status_bar->wifi_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(status_bar->wifi_label, &lv_font_montserrat_14, 0);
+    lv_obj_align(status_bar->wifi_label, LV_ALIGN_TOP_RIGHT, -50, 8);
     
-//     // 创建扩展内容
-//     create_expanded_content(sb);
+    // 创建扩展内容
+    // create_expanded_content(status_bar);
     
-//     // 初始化状态
-//     sb->current_height = STATUS_BAR_HEIGHT;
-//     sb->battery_level = 100;
-//     sb->wifi_connected = false;
-//     strcpy(sb->time_str, "12:00");
+    // 初始化状态
+    status_bar->current_height = STATUS_BAR_HEIGHT;
+    status_bar->battery_level = 100;
+    status_bar->wifi_connected = false;
+    strcpy(status_bar->time_str, "12:00");
     
-//     // 更新初始状态
-//     status_bar_update_info(sb);
-// }
+    // 更新初始状态
+    // status_bar_update_info(status_bar);
+}
 
 // // 创建扩展内容
 // static void create_expanded_content(status_bar_t *sb) {
@@ -343,10 +343,6 @@ lv_obj_t *statusbar_ui_page;
 //     status_bar_update_info(sb);
 // }
 
-void app_statusbar_ui_init(void *)
-{
-
-}
 
 void app_statusbar_ui_deinit(void *)
 {

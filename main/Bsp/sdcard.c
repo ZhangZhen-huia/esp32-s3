@@ -4,7 +4,6 @@
 #include "Inc/app_filesystem.h"
 
 static const char *TAG = "sdcard";
-// file_iterator_instance_t *file_iterator_sd = NULL;//创建一个文件迭代器
 
 
 //SD 卡的句柄，这个结构体包含了 SD 卡的详细信息和状态，通过这个指针可以访问和操作 SD 
@@ -132,7 +131,7 @@ void register_sdcard_device(void)
         .init_func = sdcard_init,
         .deinit_func = sdcard_deinit,
         .next = NULL,
-        .priority = 7,
+        .priority = DEVICEE_SD_PRIORITY,
         .state = DEVICE_STATE_UNINITIALIZED,
         .type = FILESYSTEM,
     };

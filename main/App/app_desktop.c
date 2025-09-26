@@ -15,6 +15,7 @@ static lv_obj_t *setting_img;
 static lv_obj_t *camera_img;
 static lv_obj_t *wifi_img;
 static lv_obj_t *filesystem_img;
+static lv_obj_t *music_img;
 // 全局变量
 
 
@@ -28,7 +29,7 @@ LV_IMG_DECLARE(setting)
 LV_IMG_DECLARE(camera)
 LV_IMG_DECLARE(wifi)
 LV_IMG_DECLARE(filesystem)
-
+LV_IMG_DECLARE(music)
 // static const lv_image_dsc_t * anim_imgs[] = {
 //     &img5,
 //     &img6,
@@ -92,6 +93,11 @@ static void img_touch_cb(lv_event_t * e)
         {
             ESP_LOGI(TAG,"filesystem clicked");
             xEventGroupSetBits(ui_event_group,UI_FILESYSTEM_BIT);
+        }
+        else if(obj == music_img)
+        {
+            ESP_LOGI(TAG,"music clicked");
+            xEventGroupSetBits(ui_event_group,UI_MUSIC_BIT);
         }
     }
 }
@@ -182,6 +188,15 @@ void app_desktop_ui_init(void) {
     lv_obj_set_style_radius(filesystem_img, 15, LV_PART_MAIN);
     lv_obj_add_flag(filesystem_img,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(filesystem_img,img_touch_cb,LV_EVENT_CLICKED,NULL);
+
+        //创建文件系统
+    music_img= lv_img_create(container);
+    lv_img_set_src(music_img,&music);//设置图片源
+    lv_obj_set_size(music_img, PANEL_WIDTH, PANEL_HEIGHT);
+    lv_obj_align(music_img, LV_ALIGN_CENTER, PANEL_WIDTH*3, 0);
+    lv_obj_set_style_radius(music_img, 15, LV_PART_MAIN);
+    lv_obj_add_flag(music_img,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(music_img,img_touch_cb,LV_EVENT_CLICKED,NULL);
     lvgl_port_unlock();
 
 

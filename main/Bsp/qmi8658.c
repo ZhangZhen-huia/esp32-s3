@@ -99,7 +99,7 @@ void register_qmi8658_devices(void)
         .name = "QMI8658",
         .init_func = qmi8658_init,
         .deinit_func = NULL,
-        .priority = 3,
+        .priority = DEVICEE_MUSIC_PRIORITY,
         .state = DEVICE_STATE_UNINITIALIZED,
         .next = NULL,
         .type = IMU,
