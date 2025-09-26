@@ -84,6 +84,7 @@
     "algorithm": "c",
     "format": "c",
     "stdbool.h": "c",
-    "types.h": "c"
+    "types.h": "c",
+    "spi_common.h": "c"
   }
 }

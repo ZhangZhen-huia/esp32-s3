@@ -1,11 +1,10 @@
 #include "Inc/app_filesystem.h"
-#include <errno.h>   // 在任何 .c 文件里 include 后就能用
+#include <errno.h> 
 #include <dirent.h>
 #include <stddef.h>
 #include <time.h>
-#include <sys/stat.h>   // 主要声明：stat／lstat／fstat 函数和 struct stat
-#include <sys/types.h>  // 辅助类型（早期实现需要，可移植性建议保留）
-
+#include <sys/stat.h>   
+#include <sys/types.h>  
 #define USING_CHINESE 1
 
 #if USING_CHINESE
@@ -15,21 +14,11 @@ LV_FONT_DECLARE(font_alipuhui18);
 const static char *TAG = "filesystem";
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-truncation"
-lv_obj_t *filesystem_ui_page;
-lv_obj_t *readfile_ui_page;
 
+lv_obj_t *filesystem_ui_page;
 multi_dir_browser_t *multi_dir_control;
 file_reader_t *file_reader;
 user_data_t *user_data;
-int multi_dir_browser_new_tab(multi_dir_browser_t *browser, const char *path);
-bool multi_dir_browser_open_dir(multi_dir_browser_t *browser, int tab_index, const char *path);
-static void file_reader_create_ui(file_reader_t *fr, multi_dir_browser_t *browser);
-static void file_reader_handle_event(lv_event_t *e, multi_dir_browser_t *browser);
-bool is_text_file(const char *filename);
-bool is_img_file(const char *filename);
-static void file_reader_close(file_reader_t *fr);
-static error_t file_reader_open_file(file_reader_t *fr, multi_dir_browser_t *browser, const char *path);
-
 static lv_img_dsc_t file_img_dsc = 
 {
     .header.w = 240,
@@ -39,25 +28,24 @@ static lv_img_dsc_t file_img_dsc =
     .data_size = 240*176*2,
 };
 
-extern lv_obj_t *desktop_ui_page;
-
-
-
 static lv_image_dsc_t *sd_dsc[8] = {0};
 extern lv_image_dsc_t * main_anim_imgs[4];
 extern lv_image_dsc_t * desktop_anim_imgs[4];
 
 
+int multi_dir_browser_new_tab(multi_dir_browser_t *browser, const char *path);
+bool multi_dir_browser_open_dir(multi_dir_browser_t *browser, int tab_index, const char *path);
+static void file_reader_create_ui(file_reader_t *fr, multi_dir_browser_t *browser);
+static void file_reader_handle_event(lv_event_t *e, multi_dir_browser_t *browser);
+bool is_text_file(const char *filename);
+bool is_img_file(const char *filename);
+static void file_reader_close(file_reader_t *fr);
+static error_t file_reader_open_file(file_reader_t *fr, multi_dir_browser_t *browser, const char *path);
+static void file_reader_display_prevpage(file_reader_t *fr);
 
-size_t count_char(const char *str, char ch)
-{
-    size_t cnt = 0;
-    while (*str) {          // 遇到 '\0' 停止
-        if (*str == ch) ++cnt;
-        ++str;
-    }
-    return cnt;
-}
+
+
+
 /* 加载一张 SD 卡图片到 PSRAM */
 static bool load_one_img(const char *path, uint8_t idx)
 {
@@ -386,159 +374,80 @@ static bool file_reader_load_file(file_reader_t *fr, const char *path) {
         ESP_LOGE(TAG, "Failed to open file: %s, error: %s", path, strerror(errno));
         return false;
     }
-    
     // 关闭之前打开的文件
     if (fr->file_handle) {
         fclose(fr->file_handle);
         fr->file_handle = NULL;
     }
-    
-    // 释放之前的内容
-    if (fr->lines) {
-        for (int i = 0; i < fr->total_lines; i++) {
-            if (fr->lines[i]) {
-                free(fr->lines[i]);
-                fr->lines[i] = NULL;
-            }
-        }
-        free(fr->lines);
-        fr->lines = NULL;
-    }
-    
     fr->file_handle = file;
-    fr->total_lines = 0;
-    fr->current_line = 0;
-    fr->page_start = 0;
+    fr->page_num = 0;
+    fr->now_page_num = 0;
     strlcpy(fr->file_path, path, sizeof(fr->file_path));
     
-    // 第一次遍历计算行数
-    char buffer[256];//设置一行的缓冲区
-    size_t line_count = 0;
-    //每次读一行，读取成功就行数加一，缓冲区满了也返回
-    while (fgets(buffer, sizeof(buffer), file) != NULL) {
-        line_count++;
-    }
-    //如果最后一行没有换行符，那就会少算一行，这里补上
-     // 如果文件不为空但最后一行没有换行符，需要额外计数
-    if (line_count > 0) {
-        rewind(file);
-        for (size_t i = 0; i < line_count - 1; i++) {
-            if (!fgets(buffer, sizeof(buffer), file)) break;
+    //遍历计算要显示的页数
+    char *buf  =malloc(FILE_READ_BUF_SIZE);
+    size_t page_count = 0;
+    if(fr->file_handle)
+    {
+        //读取固定的块然后返回
+        while(fread(buf, 1, FILE_READ_BUF_SIZE, fr->file_handle))
+        {
+            page_count++;
         }
-        // 读取最后一行
-        if (fgets(buffer, sizeof(buffer), file) && buffer[0] != '\0') {
-            if (strchr(buffer, '\n') == NULL) {
-                line_count++; // 最后一行没有换行符
-            }
-        }
-    }
-    fr->total_lines = line_count;
 
-    if (fr->total_lines == 0) {
-        fclose(file);
-        fr->file_handle = NULL;
-        return true; // 空文件不算错误
     }
-
-    // 分配内存存储所有行
-    fr->lines = malloc(fr->total_lines * sizeof(char *));
-    if (!fr->lines) {
-        ESP_LOGE(TAG, "Failed to allocate memory for lines");
-        fclose(file);
-        fr->file_handle = NULL;
-        return false;
-    }
-
-  // 初始化指针
-    for (int i = 0; i < fr->total_lines; i++) {
-        fr->lines[i] = NULL;
-    }
-
-    //把文件位置指针 重置到文件开头
-    // 重新读取文件并存储每一行
-    rewind(file);
-    for (int i = 0; i < fr->total_lines; i++) {
-        if (fgets(buffer, sizeof(buffer), file) != NULL) {
-            // 移除换行符
-            size_t len = strcspn(buffer, "\r\n");
-            buffer[len] = '\0';
-            
-            fr->lines[i] = malloc(len + 1);
-            if (fr->lines[i]) {
-                strcpy(fr->lines[i], buffer);
-            } else {
-                ESP_LOGE(TAG, "Failed to allocate memory for line %d", i);
-                // 清理已分配的内存
-                for (int j = 0; j < i; j++) {
-                    free(fr->lines[j]);
-                }
-                free(fr->lines);
-                fr->lines = NULL;
-                fclose(file);
-                fr->file_handle = NULL;
-                return false;
-            }
-        } else {
-            // 读取失败，调整总行数
-            fr->total_lines = i;
-            break;
-        }
-    }
-    
-    ESP_LOGI(TAG, "Loaded file: %s, total lines: %d", path, fr->total_lines);
+    fr->page_num = page_count;
+    fr->now_page_num = 0;
+    rewind(fr->file_handle);
+    ESP_LOGI(TAG, "Loaded file: %s, total pages: %d", path, fr->page_num);
+    free(buf);
     return true;
 }
 
 // 显示当前页的内容
-static void file_reader_display_page(file_reader_t *fr) {
-    if (!fr->lines || fr->total_lines == 0) {
+static void file_reader_display_nextpage(file_reader_t *fr) {
+    if (fr->page_num == 0) {
         lv_textarea_set_text(fr->text_area, "file is empty or read failed");
         ESP_LOGW(TAG, "No lines to display");
         return;
     }
-    
-    // 计算当前页的起始和结束行
-    int start_line = fr->page_start;
-    int end_line = start_line + fr->lines_per_page;
-    if (end_line > fr->total_lines) {
-        end_line = fr->total_lines;
-    }
-    
-    /// 构建显示内容 - 使用动态分配避免栈溢出
-    size_t buffer_size = fr->lines_per_page * 256;
-    char *display_text = malloc(buffer_size);
-    if (!display_text) {
-        lv_textarea_set_text(fr->text_area, "mem not enough");
-        return;
-    }
-    display_text[0] = '\0'; // 初始化空字符串
-     for (int i = start_line; i < end_line; i++) {
-        if (fr->lines[i]) {
-            // 添加行号
-            char line_buffer[300];
-            snprintf(line_buffer, sizeof(line_buffer), "%3d: %s\n", i + 1, fr->lines[i]);
-            
-            // 检查是否会溢出
-            if (strlen(display_text) + strlen(line_buffer) < buffer_size - 1) {
-                strcat(display_text, line_buffer);
-            } else {
-                strcat(display_text, "...\n[内容过长被截断]");
-                break;
+    fr->now_page_num ++;
+    long pos = ftell(fr->file_handle);      // 当前位置
+    ESP_LOGI(TAG,"读取之前位置 %ld",pos);    
+
+    char *buf  =malloc(FILE_READ_BUF_SIZE+4);
+    if(fr->file_handle)
+    {
+        if (fread(buf, 1, FILE_READ_BUF_SIZE, fr->file_handle) != NULL) {
+            // 判断最后一个utf编码是否读取完整
+            //UTF8规定，首字节的高两位是字符的开始，并且携带长度信息
+            //而&0xc0就是把高两位取出来，如果最高2位是10，那说明是UTF字符的后续字节，那就是字符不完整
+            if((buf[FILE_READ_BUF_SIZE - 1] & 0xc0) == 0x80) {
+                // 不完整, 重新读取
+                int i = FILE_READ_BUF_SIZE;
+                while(fread(buf + i, 1, 1, fr->file_handle) == 1) {
+                    //如果最后一个字节是首字节，表示上一个字符读取完整
+                    if((buf[i] & 0xc0) != 0x80) {
+                        // 读取到了一个完整的utf编码
+                        buf[i] = 0;
+                        fseek(fr->file_handle, -1, SEEK_CUR); // 回退一个字节
+                        break;
+                    }
+                    i++;
+                }
             }
-        }
+        }    
     }
     //设置一页
-    lv_textarea_set_text(fr->text_area, display_text);
+    lv_textarea_set_text(fr->text_area, buf);
     lv_textarea_set_cursor_pos(fr->text_area, 0);
     lv_obj_scroll_to_y(fr->text_area, 0, LV_ANIM_OFF);
 
-    free(display_text);
-    
-    // 更新状态标签
-    int current_page = (fr->page_start / fr->lines_per_page) + 1;
-    int total_pages = (fr->total_lines + fr->lines_per_page - 1) / fr->lines_per_page;
     char status_text[50];
-    snprintf(status_text, sizeof(status_text), "%d/%d\npage",current_page, total_pages);
+    pos = ftell(fr->file_handle);      // 当前位置
+    ESP_LOGI(TAG,"读取之后位置 %ld",pos);    
+
+    snprintf(status_text, sizeof(status_text), "%d/%d\npage",fr->now_page_num, fr->page_num);
     lv_label_set_text(fr->status_label, status_text);
     
     // 更新按钮状态
@@ -546,12 +455,78 @@ static void file_reader_display_page(file_reader_t *fr) {
     lv_obj_clear_flag(fr->prev_btn, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_state(fr->next_btn, LV_STATE_DISABLED);
     lv_obj_clear_flag(fr->next_btn, LV_OBJ_FLAG_HIDDEN);
-    if (fr->page_start <= 0) {
+    if (fr->now_page_num <= 1) {
         lv_obj_add_state(fr->prev_btn, LV_STATE_DISABLED);
         lv_obj_add_flag(fr->prev_btn,LV_OBJ_FLAG_HIDDEN);
     }
     
-    if (fr->page_start + fr->lines_per_page >= fr->total_lines) {
+    if (fr->now_page_num >= fr->page_num) {
+        lv_obj_add_state(fr->next_btn, LV_STATE_DISABLED);
+        lv_obj_add_flag(fr->next_btn,LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static void file_reader_display_prevpage(file_reader_t *fr) {
+    if (fr->page_num == 0) {
+        lv_textarea_set_text(fr->text_area, "file is empty or read failed");
+        ESP_LOGW(TAG, "No lines to display");
+        return;
+    }
+    fr->now_page_num--;
+    char *buf  =malloc(FILE_READ_BUF_SIZE+4);
+    long pos = ftell(fr->file_handle);      // 当前位置
+    ESP_LOGI(TAG,"当前位置 %ld",pos);
+    if((pos - 2*FILE_READ_BUF_SIZE) <0 )
+        fseek(fr->file_handle,0, SEEK_SET); 
+    else 
+        {
+            fseek(fr->file_handle,pos - 2*FILE_READ_BUF_SIZE, SEEK_SET); // 前移 N
+            ESP_LOGI(TAG,"前移动到 %ld 位置",pos - 2*FILE_READ_BUF_SIZE);
+        }
+      
+
+    if(fr->file_handle)
+    {
+        if (fread(buf, 1, FILE_READ_BUF_SIZE, fr->file_handle) != NULL) {
+            // 判断最后一个utf编码是否读取完整
+            if((buf[FILE_READ_BUF_SIZE - 1] & 0xc0) == 0x80) {
+                // 不完整, 重新读取(UTF-8 的第一个字节的高位为1, 说明这个字节是一个utf编码的开始)
+                int i = FILE_READ_BUF_SIZE;
+                while(fread(buf + i, 1, 1, fr->file_handle) == 1) {
+                    if((buf[i] & 0xc0) != 0x80) {
+                        // 读取到了一个完整的utf编码
+                        buf[i] = 0;
+                        fseek(fr->file_handle, -1, SEEK_CUR); // 回退一个字节
+                        break;
+                    }
+                    i++;
+                }
+            }
+        }    
+    }
+    //设置一页
+    lv_textarea_set_text(fr->text_area, buf);
+    lv_textarea_set_cursor_pos(fr->text_area, 0);
+    lv_obj_scroll_to_y(fr->text_area, 0, LV_ANIM_OFF);
+
+    char status_text[50];
+
+    snprintf(status_text, sizeof(status_text), "%d/%d\npage",fr->now_page_num, fr->page_num);
+    lv_label_set_text(fr->status_label, status_text);
+    pos = ftell(fr->file_handle);      // 当前位置
+    ESP_LOGI(TAG,"读取之后位置 %ld",pos);
+
+    // 更新按钮状态
+    lv_obj_clear_state(fr->prev_btn, LV_STATE_DISABLED);
+    lv_obj_clear_flag(fr->prev_btn, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_state(fr->next_btn, LV_STATE_DISABLED);
+    lv_obj_clear_flag(fr->next_btn, LV_OBJ_FLAG_HIDDEN);
+    if (fr->now_page_num <= 1) {
+        lv_obj_add_state(fr->prev_btn, LV_STATE_DISABLED);
+        lv_obj_add_flag(fr->prev_btn,LV_OBJ_FLAG_HIDDEN);
+    }
+    
+    if (fr->now_page_num >= fr->page_num) {
         lv_obj_add_state(fr->next_btn, LV_STATE_DISABLED);
         lv_obj_add_flag(fr->next_btn,LV_OBJ_FLAG_HIDDEN);
     }
@@ -561,7 +536,6 @@ static void file_reader_display_page(file_reader_t *fr) {
 // 创建文件阅读界面
 static void file_reader_create_ui(file_reader_t *fr, multi_dir_browser_t *browser) {
     
-    file_reader->lines_per_page = 10; // 每页显示10行
     // 创建阅读界面
     fr->read_screen = lv_obj_create(browser->main_screen);
     lv_obj_add_style(fr->read_screen,&default_style,0);
@@ -672,7 +646,7 @@ static error_t file_reader_open_file(file_reader_t *fr, multi_dir_browser_t *bro
         return ESP_FAIL;
     }
     // 显示一页
-    file_reader_display_page(fr);
+    file_reader_display_nextpage(fr);
     ESP_LOGI(TAG, "File reader opened successfully: %s", path);
     return ESP_OK;
 }
@@ -686,17 +660,6 @@ static void file_reader_close(file_reader_t *fr) {
         fr->file_handle = NULL;
     }
     
-    if (fr->lines) {
-        for (int i = 0; i < fr->total_lines; i++) {
-            if (fr->lines[i]) {
-                free(fr->lines[i]);
-                fr->lines[i] = NULL;
-            }
-        }
-        free(fr->lines);
-        fr->lines = NULL;
-    }
-    
     // 清理图片数据
     if (file_img_dsc.data) {
         free((void*)file_img_dsc.data);
@@ -707,9 +670,8 @@ static void file_reader_close(file_reader_t *fr) {
         free(user_data);
         user_data = NULL;
     }
-    fr->total_lines = 0;
-    fr->current_line = 0;
-    fr->page_start = 0;
+    fr->now_page_num = 0;
+    fr->page_num = 0;
     fr->is_reading = false;
     fr->file_path[0] = '\0';
 }
@@ -731,18 +693,16 @@ static void file_reader_handle_event(lv_event_t *e, multi_dir_browser_t *browser
         
         // 上一页按钮
         if (target == file_reader->prev_btn) {
-            if (file_reader->page_start >= file_reader->lines_per_page) {
-                file_reader->page_start -= file_reader->lines_per_page;
-                file_reader_display_page(file_reader);
+            if (file_reader->now_page_num > 0) {
+                file_reader_display_prevpage(file_reader);
             }
             return;
         }
         
         // 下一页按钮
         if (target == file_reader->next_btn) {
-            if (file_reader->page_start + file_reader->lines_per_page < file_reader->total_lines) {
-                file_reader->page_start += file_reader->lines_per_page;
-                file_reader_display_page(file_reader);
+            if (file_reader->now_page_num < file_reader->page_num) {
+                file_reader_display_nextpage(file_reader);
             }
             return;
         }
@@ -791,10 +751,8 @@ void app_filesystem_ui_init(void)
     multi_dir_control = heap_caps_calloc(1, sizeof(multi_dir_browser_t),MALLOC_CAP_DEFAULT);
     lvgl_port_lock(0);
     init_styles(multi_dir_control);
-    // readfile_ui_page = lv_obj_create(lv_scr_act());
     filesystem_ui_page = lv_obj_create(lv_scr_act());
     lv_obj_add_style(filesystem_ui_page, &default_style, LV_PART_MAIN);
-    // lv_obj_add_style(readfile_ui_page, &default_style, LV_PART_MAIN);
     // 设置屏幕背景
     lv_obj_set_style_bg_color(filesystem_ui_page, lv_color_hex(0x0), 0);
     lv_obj_set_style_bg_opa(filesystem_ui_page, LV_OPA_COVER, 0);
@@ -872,21 +830,10 @@ void app_filesystem_ui_init(void)
     strlcpy(multi_dir_control->tabs[0].current_path, "/sdcard", sizeof(multi_dir_control->tabs[0].current_path));
 
     multi_dir_browser_open_dir(multi_dir_control, 0, "/sdcard");
-    
-    // 加载默认书签
-    // multi_dir_browser_add_bookmark(multi_dir_control, "Root", "/sdcard");
-    // multi_dir_browser_add_bookmark(multi_dir_control, "Documents", "/sdcard/Documents");
-    // multi_dir_browser_add_bookmark(multi_dir_control, "Pictures", "/sdcard/Pictures");
    
     multi_dir_control->initialized = true;
 
-
-
     lvgl_port_unlock();
-    
-    
-
-
 }
 
 
@@ -897,7 +844,6 @@ bool multi_dir_browser_open_dir(multi_dir_browser_t *browser, int tab_index, con
     }
 
     tab_t *tab = &browser->tabs[tab_index];
-    
 
     //每次进来之前先free上一次的iterator
     file_iterator_delete(tab->iterator);
@@ -971,14 +917,6 @@ bool multi_dir_browser_open_dir(multi_dir_browser_t *browser, int tab_index, con
         lv_obj_add_event_cb(btn, multi_dir_browser_handle_event, LV_EVENT_CLICKED, browser);
     }
 
-    // 保存当前状态到历史记录
-    if (tab->history_count < MAX_HISTORY) {
-        strlcpy(tab->history[tab->history_count].path, tab->current_path, MAX_PATH_LEN);
-        tab->history[tab->history_count].scroll_pos = tab->scroll_pos;
-        tab->history[tab->history_count].selected_index = tab->selected_index;
-        tab->history_count++;
-        tab->history_index = tab->history_count - 1;
-    }
     
     // 添加文件和目录按钮
     for (int i = 0; i < tab->iterator->count; i++) {
@@ -1008,9 +946,6 @@ bool multi_dir_browser_open_dir(multi_dir_browser_t *browser, int tab_index, con
         lv_obj_set_user_data(btn, (void *)(intptr_t)i);
         lv_obj_add_event_cb(btn, multi_dir_browser_handle_event, LV_EVENT_CLICKED, browser);
     }
-    
-    // 重置滚动位置和选择索引
-    tab->selected_index = 0;
     
     return true;
 }
