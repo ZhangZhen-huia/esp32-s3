@@ -90,6 +90,7 @@
     "esp_codec_dev.h": "c",
     "app_music.h": "c",
     "user_config.h": "c",
-    "audio_player.h": "c"
+    "audio_player.h": "c",
+    "key.h": "c"
   }
 }

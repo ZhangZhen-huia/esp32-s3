@@ -1,5 +1,5 @@
 #include "Inc/music.h"
-
+#include "audio_player.h"
 
 
 
@@ -181,15 +181,20 @@ esp_err_t bsp_codec_set_fs(uint32_t rate, uint32_t bits_cfg, i2s_slot_mode_t ch)
 // 音频芯片初始化
 esp_err_t bsp_codec_init(void)
 {
-    play_dev_handle = bsp_audio_codec_speaker_init();
-    assert((play_dev_handle) && "play_dev_handle not initialized");
+    static uint8_t flag = 0;
+    if(!flag)
+    {
+        play_dev_handle = bsp_audio_codec_speaker_init();
+        assert((play_dev_handle) && "play_dev_handle not initialized");
 
-    record_dev_handle = bsp_audio_codec_microphone_init();
-    assert((record_dev_handle) && "record_dev_handle not initialized");
+        record_dev_handle = bsp_audio_codec_microphone_init();
+        assert((record_dev_handle) && "record_dev_handle not initialized");
 
-    bsp_codec_set_fs(CODEC_DEFAULT_SAMPLE_RATE, CODEC_DEFAULT_BIT_WIDTH, CODEC_DEFAULT_CHANNEL);
-    bsp_codec_mute_set(false);
-    bsp_codec_volume_set(50 ,NULL);// 设置音量
+        bsp_codec_set_fs(CODEC_DEFAULT_SAMPLE_RATE, CODEC_DEFAULT_BIT_WIDTH, CODEC_DEFAULT_CHANNEL);
+        bsp_codec_mute_set(false);
+        bsp_codec_volume_set(50 ,NULL);// 设置音量
+        flag = 1;
+    }
 
     mp3_player_init();
     return ESP_OK;
@@ -222,16 +227,23 @@ esp_err_t bsp_codec_volume_set(int volume, int *volume_set)
 }
 
 
+esp_err_t bsp_codec_deinit(void)
+{
+    audio_player_delete();
+    device_descriptor_t *music_device = device_find("music");
+    music_device->state = DEVICE_STATE_UNINITIALIZED;
+    return ESP_OK;
+}
 
 void register_music_device(void)
 {
     static device_descriptor_t music_device = {
-        .name = "MUSIC_DEV",
+        .name = "music",
         .type = PROTOCOL,
         .init_func = bsp_codec_init,
-        .deinit_func = NULL,
+        .deinit_func = bsp_codec_deinit,
         .priority = DEVICEE_MUSIC_PRIORITY,
-        .state = DEVICE_STATE_UNINITIALIZED,
+        .state = DEVICE_STATE_PENDING,
         .next = NULL
     };
 

@@ -117,7 +117,7 @@ static void _audio_player_callback(audio_player_cb_ctx_t *ctx)
 void mp3_player_init(void)
 {
     // 获取文件信息
-    file_iterator_music = file_iterator_new("/sdcard/music/");
+    file_iterator_music = file_iterator_new("/sdcard/music");
     assert(file_iterator_music != NULL);
 
     // 初始化音频播放
@@ -258,6 +258,12 @@ static void build_file_list(lv_obj_t *music_list)
 
     lvgl_port_lock(0);
     lv_dropdown_clear_options(music_list);
+    lv_obj_t *list = lv_dropdown_get_list(music_list);   // 获取弹出层对象
+    #if USING_CHINESE
+    lv_obj_set_style_text_font(list, &font_alipuhui18, LV_PART_MAIN);
+    #else
+    lv_obj_set_style_text_font(list, &lv_font_montserrat_18, LV_STATE_DEFAULT);
+    #endif
     lvgl_port_unlock();
 
     for(size_t i = 0; i<file_iterator_music->count; i++)
@@ -401,6 +407,7 @@ void app_music_ui_init(void)
     #else
     lv_obj_set_style_text_font(music_list, &lv_font_montserrat_20, LV_STATE_DEFAULT);
     #endif
+    lv_obj_set_style_text_font(music_list,&lv_font_montserrat_18,LV_PART_INDICATOR);
     lv_obj_set_width(music_list, 200);
     lv_obj_align_to(music_list, lab_title, LV_ALIGN_OUT_BOTTOM_MID, 0, 20);
     lv_obj_set_user_data(music_list, (void *) lab_title);

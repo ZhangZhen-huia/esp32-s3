@@ -4,6 +4,7 @@
 #include "Inc/extend_io.h"
 #include "Dev/Inc/dev_registry.h"
 
+
 static const char *TAG = "lcd";
 
 
@@ -85,7 +86,7 @@ esp_lcd_panel_io_handle_t io_handle = NULL;
 static esp_lcd_touch_handle_t tp;   // 触摸屏句柄
 static lv_disp_t *disp;      // 指向液晶屏
 static lv_indev_t *disp_indev = NULL; // 指向触摸屏
-
+static lv_indev_t *indev_drv_keypad = NULL; //实体按键驱动
 // 液晶屏初始化
 esp_err_t bsp_display_new(void)
 {
@@ -251,6 +252,7 @@ static esp_err_t bsp_lvgl_start(void)
     /* 初始化触摸屏 并添加LVGL接口 */
     disp_indev = bsp_display_indev_init(disp);
 
+    
     /* 打开液晶屏背光 */
     bsp_display_backlight_on();
     

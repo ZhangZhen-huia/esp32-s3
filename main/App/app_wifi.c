@@ -21,6 +21,7 @@ static const char *TAG = "app_wifi";
 lv_obj_t *wifi_scan_page = NULL;                   // wifi扫描页面
 lv_obj_t *wifi_password_page = NULL;
 lv_obj_t *wifi_connect_page = NULL;
+lv_obj_t *wifi_main_page = NULL;
 lv_obj_t *wifi_list;            
 lv_obj_t *label_wifi_connect; // wifi连接页面label 
 lv_obj_t *ta_pass_text;       // 密码输入文本框 textarea
@@ -35,6 +36,11 @@ EventGroupHandle_t s_wifi_event_group;
 
 esp_event_handler_instance_t instance_any_id;
 esp_event_handler_instance_t instance_got_ip;
+
+lv_image_dsc_t * main_anim_imgs[4];
+#define TXT  "Wifi Scan..."   // 可换成汉字，每个元素一个字符
+lv_obj_t *letter[sizeof(TXT)-1];   // 每个字母一个标签
+
 esp_netif_t *sta_netif = NULL;
 uint16_t ap_count = 0;                      //定义热点数量
 uint16_t number = DEFAULT_SCAN_LIST_SIZE;   //定义默认最大扫描列表数量
@@ -177,56 +183,6 @@ static void btn_del_cb(lv_event_t * e)
     }
 }
 
-// // 密码roller的遮罩显示效果
-// static void mask_event_cb(lv_event_t * e)
-// {
-    // lv_event_code_t code = lv_event_get_code(e);
-    // lv_obj_t * obj = lv_event_get_target(e);
-
-    // static int16_t mask_top_id = -1;
-    // static int16_t mask_bottom_id = -1;
-
-    // if(code == LV_EVENT_COVER_CHECK) {
-    //     lv_event_set_cover_res(e, LV_COVER_RES_MASKED);
-    // }
-    // else if(code == LV_EVENT_DRAW_MAIN_BEGIN) {
-    //     /* add mask */
-    //     const lv_font_t * font = lv_obj_get_style_text_font(obj, LV_PART_MAIN);
-    //     lv_coord_t line_space = lv_obj_get_style_text_line_space(obj, LV_PART_MAIN);
-    //     lv_coord_t font_h = lv_font_get_line_height(font);
-
-    //     lv_area_t roller_coords;
-    //     lv_obj_get_coords(obj, &roller_coords);
-
-    //     lv_area_t rect_area;
-    //     rect_area.x1 = roller_coords.x1;
-    //     rect_area.x2 = roller_coords.x2;
-    //     rect_area.y1 = roller_coords.y1;
-    //     rect_area.y2 = roller_coords.y1 + (lv_obj_get_height(obj) - font_h - line_space) / 2;
-
-    //     lv_draw_sw_mask_fade_param_t * fade_mask_top = lv_mem_buf_get(sizeof(lv_draw_sw_mask_fade_param_t));
-    //     lv_draw_mask_fade_init(fade_mask_top, &rect_area, LV_OPA_TRANSP, rect_area.y1, LV_OPA_COVER, rect_area.y2);
-    //     mask_top_id = lv_draw_mask_add(fade_mask_top, NULL);
-
-    //     rect_area.y1 = rect_area.y2 + font_h + line_space - 1;
-    //     rect_area.y2 = roller_coords.y2;
-
-    //     lv_draw_sw_mask_fade_param_t * fade_mask_bottom = lv_mem_buf_get(sizeof(lv_draw_sw_mask_fade_param_t));
-    //     lv_draw_mask_fade_init(fade_mask_bottom, &rect_area, LV_OPA_COVER, rect_area.y1, LV_OPA_TRANSP, rect_area.y2);
-    //     mask_bottom_id = lv_draw_mask_add(fade_mask_bottom, NULL);
-
-    // }
-    // else if(code == LV_EVENT_DRAW_POST_END) {
-    //     lv_draw_sw_mask_fade_param_t * fade_mask_top = lv_draw_mask_remove_id(mask_top_id);
-    //     lv_draw_sw_mask_fade_param_t * fade_mask_bottom = lv_draw_mask_remove_id(mask_bottom_id);
-    //     lv_draw_mask_free_param(fade_mask_top);
-    //     lv_draw_mask_free_param(fade_mask_bottom);
-    //     lv_mem_buf_release(fade_mask_top);
-    //     lv_mem_buf_release(fade_mask_bottom);
-    //     mask_top_id = -1;
-    //     mask_bottom_id = -1;
-    // }
-// }
 
 // 数字键 处理函数
 static void btn_num_cb(lv_event_t * e)
@@ -465,6 +421,7 @@ static void wifi_connect(void *arg)
                 lvgl_port_unlock();
                 
             }
+            lvgl_port_lock(0);
             btn_delete_label = lv_btn_create(wifi_connect_page);
             lv_obj_align(btn_delete_label,LV_ALIGN_BOTTOM_MID,0,-40);
             lv_obj_set_size(btn_delete_label, 100, 80);
@@ -477,18 +434,87 @@ static void wifi_connect(void *arg)
             lv_obj_set_style_text_font(label_back, &lv_font_montserrat_20, 0);
             lv_obj_set_style_text_color(label_back, lv_color_hex(0x000000), 0); 
             lv_obj_align(label_back, LV_ALIGN_CENTER, 0, 0);
-
+            lvgl_port_unlock();
         }
     }
 }
 
 
+
+
+
+
+
+static void jump_exec(void *var, int32_t v)
+{
+    /* v: 0→1000→0 缓入-缓出，振幅 8 px，中心对齐 */
+    int32_t y = (v - 500) * 6 / 1000;   // -4 ~ +4
+    lv_obj_align((lv_obj_t *)var, LV_ALIGN_BOTTOM_MID,
+                 lv_obj_get_x_aligned((lv_obj_t *)var), y-10);
+}
+
 void app_wifi_ui_init(void *)
 {
     ESP_LOGI(TAG,"wifi ui");
-
     lvgl_port_lock(0);
+    static lv_style_t style;
+    lv_style_init(&style);
+    lv_style_set_bg_opa( &style, LV_OPA_COVER ); // 背景透明度
+    lv_style_set_border_width(&style, 0); // 边框宽度
+    lv_style_set_pad_all(&style, 0);  // 内间距
+    lv_style_set_radius(&style, 0);   // 圆角半径
+    lv_style_set_width(&style, 320);  // 宽
+    lv_style_set_height(&style, 240); // 高
 
+    wifi_main_page = lv_obj_create(lv_scr_act());
+    lv_obj_add_style(wifi_main_page, &style, 0);
+
+    //跳动字体
+    for (int i = 0; i < sizeof(TXT)-1; ++i) {
+        char buf[2] = {TXT[i], '\0'};
+        letter[i] = lv_label_create(wifi_main_page);
+        lv_label_set_text(letter[i], buf);
+        lv_obj_set_style_text_font(letter[i], &lv_font_montserrat_18, 0);
+        lv_obj_align(letter[i], LV_ALIGN_BOTTOM_MID, (i - 5) * 18, 0);  // 水平排布,竖直跳动，跳动基值在回调里面写
+    }
+
+        for (int i = 0; i < sizeof(TXT)-1; ++i) {
+        lv_anim_t *jump = lv_malloc(sizeof(lv_anim_t));
+        lv_anim_init(jump);
+        lv_anim_set_var(jump, letter[i]);
+        lv_anim_set_values(jump, 0, 1000);
+        lv_anim_set_duration(jump, 1200);                    // 单次 400 ms
+        lv_anim_set_delay(jump, i * 140);                // 依次延迟 80 ms
+        lv_anim_set_repeat_count(jump, LV_ANIM_REPEAT_INFINITE);
+        lv_anim_set_exec_cb(jump, jump_exec);
+        lv_anim_set_path_cb(jump, lv_anim_path_ease_in_out );
+        lv_anim_start(jump);
+        }
+
+    lv_obj_t * animimg0 = lv_animimg_create(wifi_main_page);
+    
+    lv_obj_set_align(animimg0,LV_ALIGN_TOP_MID);
+    lv_obj_set_size(animimg0,200,200);
+    lv_animimg_set_src(animimg0, (const void **)main_anim_imgs, 4);
+    lv_animimg_set_duration(animimg0, 500);
+    lv_animimg_set_repeat_count(animimg0,LV_ANIM_REPEAT_INFINITE);
+    lvgl_port_unlock();
+    lv_animimg_start(animimg0);
+    //开启扫描,阻塞扫描
+    esp_wifi_scan_start(NULL, true);
+
+    // EventBits_t wifi_bits = xEventGroupWaitBits(s_wifi_event_group,
+    //         WIFI_SCAN_DOWN_BIT,
+    //         pdTRUE,
+    //         pdFALSE,
+    //         portMAX_DELAY);
+    //         if(wifi_bits & WIFI_SCAN_DOWN_BIT)
+    //         {
+    //             xEventGroupSetBits(ui_event_group,UI_WIFI_BIT);
+    //         }
+    lvgl_port_lock(0);
+    lv_obj_del(wifi_main_page);
+    wifi_main_page = NULL;
     wifi_scan_page = lv_obj_create(lv_scr_act());
     lv_obj_add_style(wifi_scan_page, &default_style, 0);
     lv_obj_set_scrollbar_mode(wifi_scan_page, LV_SCROLLBAR_MODE_OFF); // 隐藏wifi_scan_page滚动条
@@ -553,15 +579,24 @@ void app_wifi_ui_deinit(void *)
         
     ESP_LOGI(TAG,"delete finish");
     lvgl_port_unlock();
-    device_deinitialize("Wifi");
     
 }
 
 // 清除wifi初始化内容
 static esp_err_t wifiset_deinit(void)
 {
-    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &instance_any_id));
-    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &instance_got_ip));
+    ESP_LOGW(TAG, "unregister instance=%p", instance_any_id);
+    ESP_LOGW(TAG, "unregister instance=%p", instance_got_ip);
+    if(instance_any_id)
+    {
+        ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
+        instance_any_id = NULL;
+    }
+    if(instance_got_ip)
+    {
+        ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
+        instance_got_ip = NULL;
+    }
     esp_err_t err = esp_wifi_stop();
     if (err == ESP_ERR_WIFI_NOT_INIT) {
         return err;
@@ -572,7 +607,11 @@ static esp_err_t wifiset_deinit(void)
     esp_netif_destroy(sta_netif);
     sta_netif = NULL;
     ESP_ERROR_CHECK(esp_event_loop_delete_default());
-    return true;
+    
+    device_descriptor_t *device_descriptor = device_find("Wifi");
+    device_descriptor->state = DEVICE_STATE_UNINITIALIZED;
+
+    return ESP_OK;
 }
 
 
@@ -686,7 +725,10 @@ static esp_err_t wifi_sta_init(void)
                                                         &event_handler,
                                                         NULL,
                                                         &instance_got_ip));
-
+    assert(instance_any_id);
+    assert(instance_got_ip);
+    ESP_LOGW(TAG, "register instance=%p", instance_any_id);
+    ESP_LOGW(TAG, "register instance=%p", instance_got_ip);
 
 
 

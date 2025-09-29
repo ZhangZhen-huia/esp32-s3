@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "Item",
-    "project_version":    "26b8a87-dirty",
+    "project_version":    "70ca98d-dirty",
     "project_path":       "/home/hui/esp_test/Item",
     "idf_path":           "/home/hui/esp/esp-idf",
     "build_dir":          "/home/hui/esp_test/Item/build",
@@ -1345,7 +1345,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [ "chmorgan__esp-audio-player", "chmorgan__esp-file-iterator", "espressif__esp32-camera", "espressif__esp_codec_dev", "espressif__esp_lcd_touch_ft5x06", "espressif__esp_lvgl_port", "lvgl__lvgl" ],
             "file": "/home/hui/esp_test/Item/build/esp-idf/main/libmain.a",
-            "sources": [ "/home/hui/esp_test/Item/main/main.c", "/home/hui/esp_test/Item/main/Bsp/i2c.c", "/home/hui/esp_test/Item/main/Bsp/lcd.c", "/home/hui/esp_test/Item/main/Bsp/extend_io.c", "/home/hui/esp_test/Item/main/Bsp/wifi.c", "/home/hui/esp_test/Item/main/Bsp/camera.c", "/home/hui/esp_test/Item/main/Bsp/qmi8658.c", "/home/hui/esp_test/Item/main/Bsp/sdcard.c", "/home/hui/esp_test/Item/main/Bsp/music.c", "/home/hui/esp_test/Item/main/App/app_ui.c", "/home/hui/esp_test/Item/main/App/app_wifi.c", "/home/hui/esp_test/Item/main/App/app_desktop.c", "/home/hui/esp_test/Item/main/App/app_statusbar.c", "/home/hui/esp_test/Item/main/App/app_camera.c", "/home/hui/esp_test/Item/main/App/app_setting.c", "/home/hui/esp_test/Item/main/App/app_filesystem.c", "/home/hui/esp_test/Item/main/App/app_music.c", "/home/hui/esp_test/Item/main/Dev/dev_registry.c", "/home/hui/esp_test/Item/main/img/setting.c", "/home/hui/esp_test/Item/main/img/camera.c", "/home/hui/esp_test/Item/main/img/wifi.c", "/home/hui/esp_test/Item/main/img/filesystem.c", "/home/hui/esp_test/Item/main/img/music.c", "/home/hui/esp_test/Item/main/Font/font_alipuhui18.c", "/home/hui/esp_test/Item/main/Font/font_alipuhui32.c" ],
+            "sources": [ "/home/hui/esp_test/Item/main/main.c", "/home/hui/esp_test/Item/main/Bsp/i2c.c", "/home/hui/esp_test/Item/main/Bsp/lcd.c", "/home/hui/esp_test/Item/main/Bsp/extend_io.c", "/home/hui/esp_test/Item/main/Bsp/wifi.c", "/home/hui/esp_test/Item/main/Bsp/camera.c", "/home/hui/esp_test/Item/main/Bsp/qmi8658.c", "/home/hui/esp_test/Item/main/Bsp/sdcard.c", "/home/hui/esp_test/Item/main/Bsp/music.c", "/home/hui/esp_test/Item/main/Bsp/key.c", "/home/hui/esp_test/Item/main/App/app_ui.c", "/home/hui/esp_test/Item/main/App/app_wifi.c", "/home/hui/esp_test/Item/main/App/app_desktop.c", "/home/hui/esp_test/Item/main/App/app_statusbar.c", "/home/hui/esp_test/Item/main/App/app_camera.c", "/home/hui/esp_test/Item/main/App/app_setting.c", "/home/hui/esp_test/Item/main/App/app_filesystem.c", "/home/hui/esp_test/Item/main/App/app_music.c", "/home/hui/esp_test/Item/main/App/app_ota.c", "/home/hui/esp_test/Item/main/Dev/dev_registry.c", "/home/hui/esp_test/Item/main/img/setting.c", "/home/hui/esp_test/Item/main/img/camera.c", "/home/hui/esp_test/Item/main/img/wifi.c", "/home/hui/esp_test/Item/main/img/filesystem.c", "/home/hui/esp_test/Item/main/img/music.c", "/home/hui/esp_test/Item/main/Font/font_alipuhui18.c", "/home/hui/esp_test/Item/main/Font/font_alipuhui32.c" ],
             "include_dirs": [ ".", "./App", "./Bsp", "./Dev", "./Font" ]
         },
         "mbedtls": {

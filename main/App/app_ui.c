@@ -33,7 +33,7 @@ void app_ui_Init(void)
 
 	//创建ui
 	app_main_ui_register();
-	// app_wifi_ui_register();
+	app_wifi_ui_register();
 	app_desktop_ui_register();
 	app_statusbar_ui_register();
 	app_camera_ui_register();
@@ -65,6 +65,8 @@ void app_ui_task(void *arg)
 		}
 		else if(ui_bits & UI_WIFI_BIT)
 		{
+			device_deinitialize("music");
+			device_initialize("Wifi");
 			app_ui_display_by_id(UI_WIFI);
 		}
 		else if(ui_bits & UI_DESKTOP_BIT)
@@ -73,6 +75,7 @@ void app_ui_task(void *arg)
 		}
 		else if(ui_bits & UI_CAMERA_BIT)
 		{
+			device_deinitialize("music");
 			app_ui_display_by_id(UI_CAMERA);
 		}
 		else if(ui_bits & UI_SETTING_BIT)
@@ -85,6 +88,8 @@ void app_ui_task(void *arg)
 		}
 		else if(ui_bits & UI_MUSIC_BIT)
 		{
+			device_deinitialize("Wifi");
+			device_initialize("music");
 			app_ui_display_by_id(UI_MUSIC);
 		}		
 	}

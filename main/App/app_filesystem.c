@@ -767,6 +767,11 @@ void app_filesystem_ui_init(void)
     lv_obj_set_size(multi_dir_control->tabview, 320, 240);
     lv_tabview_set_tab_bar_size(multi_dir_control->tabview,40);
     lv_obj_set_scrollbar_mode(multi_dir_control->tabview, LV_SCROLLBAR_MODE_OFF); // 隐藏setting_list滚动条
+    #if USING_CHINESE
+    lv_obj_set_style_text_font(multi_dir_control->tabview,&font_alipuhui18,LV_PART_MAIN);
+    #else
+    lv_obj_set_style_text_font(multi_dir_control->tabview,&lv_font_montserrat_18,LV_PART_MAIN);
+    #endif
 
     // 添加默认标签页
     multi_dir_control->tab_count = 1;
@@ -784,7 +789,11 @@ void app_filesystem_ui_init(void)
     lv_obj_add_style(multi_dir_control->tabs[0].path_label, &multi_dir_control->style_label, 0);
     lv_label_set_text(multi_dir_control->tabs[0].path_label, "/sdcard");
     lv_obj_align(multi_dir_control->tabs[0].path_label, LV_ALIGN_TOP_LEFT, 0, 0);
-    
+    #if USING_CHINESE
+    lv_obj_set_style_text_font(multi_dir_control->tabs[0].path_label,&font_alipuhui18,LV_PART_MAIN);
+    #else
+    lv_obj_set_style_text_font(multi_dir_control->tabs[0].path_label,&lv_font_montserrat_18,LV_PART_MAIN);
+    #endif
     // 创建文件列表
     multi_dir_control->tabs[0].file_list = lv_list_create(multi_dir_control->tabs[0].tab);
     lv_obj_add_style(multi_dir_control->tabs[0].file_list,&multi_dir_control->style_list,0);
@@ -924,7 +933,7 @@ bool multi_dir_browser_open_dir(multi_dir_browser_t *browser, int tab_index, con
         char btn_text[128];
         char size_text[32];
 
-        if(!tab->files[i].is_dir)
+        if(tab->files[i].is_dir == 0)
         {
             if (tab->files[i].size < 1024) {
                 snprintf(size_text, sizeof(size_text), "%dB", tab->files[i].size);
@@ -933,11 +942,13 @@ bool multi_dir_browser_open_dir(multi_dir_browser_t *browser, int tab_index, con
             } else {
                 snprintf(size_text, sizeof(size_text), "%.1fMB", tab->files[i].size / (1024.0 * 1024.0));
             }
+            snprintf(btn_text, sizeof(btn_text), " %s %s", tab->files[i].name, size_text);
+        }
+        else
+        {
+            snprintf(btn_text, sizeof(btn_text), " %s", tab->files[i].name);
         }
         
-        
-        
-        snprintf(btn_text, sizeof(btn_text), " %s %s", tab->files[i].name, size_text);
         lv_obj_t *btn = lv_list_add_btn(tab->file_list, icon, btn_text);
         lv_obj_set_size(btn,LV_PCT(100),40);
         lv_obj_add_style(btn, &browser->style_list_btn, 0);

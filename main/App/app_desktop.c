@@ -77,7 +77,7 @@ static void img_touch_cb(lv_event_t * e)
         if(obj == wifi_img)
         {
             ESP_LOGI(TAG,"wifi clicked");
-            xEventGroupSetBits(ui_event_group,UI_MAIN_BIT);
+            xEventGroupSetBits(ui_event_group,UI_WIFI_BIT);
         }
         else if(obj == setting_img)
         {
